@@ -47,6 +47,10 @@ export async function getStudentDashboard(req: AuthenticatedRequest, res: Respon
     let activeAttendanceSession = null;
     let studentAlreadyMarkedToday = false;
 
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
     if (activeClass) {
       activeAttendanceSession = await AttendanceSession.findOne({
         classSession: activeClass._id,
@@ -55,13 +59,15 @@ export async function getStudentDashboard(req: AuthenticatedRequest, res: Respon
 
       const existingRecord = await AttendanceRecord.findOne({
         student: student._id,
-        classSession: activeClass._id,
+        $or: [
+          { classSession: activeClass._id },
+          { attendanceDate: { $gte: startOfDay, $lte: endOfDay }, checkInTime: { $exists: true, $ne: null } },
+        ],
       });
       studentAlreadyMarkedToday = !!existingRecord;
     }
 
     // Weekly Timeline: get records for the current cohort week
-    const now = new Date();
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
     startOfWeek.setHours(0, 0, 0, 0);

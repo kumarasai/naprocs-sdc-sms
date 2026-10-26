@@ -105,6 +105,11 @@ export const StudentDashboard: React.FC = () => {
           clientIp: resp.detectedIp || '',
           ssid: resp.requiredSsid || 'Naprocs-Campus-5G',
         });
+      } else if (resp?.alreadyCheckedOut) {
+        setToastMessage(resp.message || 'You have already completed attendance for today.');
+        setShowToast(true);
+        await fetchLiveStatus();
+        setTimeout(() => setShowToast(false), 4500);
       } else {
         alert(resp?.message || 'Failed to check in for attendance.');
       }
@@ -302,31 +307,26 @@ export const StudentDashboard: React.FC = () => {
                   </button>
                 </div>
               ) : liveAttendance?.hasCompletedToday ? (
-                /* Completed Today State: Clean Status Badge & Summary + Allow Check In Again */
+                /* Completed Today State: Clean Status Badge & Summary (No Re-Check-In) */
                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-surface-container-lowest border border-emerald-500/40 shadow-xs">
+                  <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-surface-container-lowest border border-emerald-500/40 shadow-xs">
                     <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700">
-                      <span className="material-symbols-outlined text-[22px]">verified</span>
+                      <span className="material-symbols-outlined text-[24px]">verified</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-body-sm font-bold text-emerald-800">
-                        Today's Attendance Recorded ({liveAttendance.status})
-                      </span>
-                      <span className="text-[12px] text-on-surface-variant font-mono">
-                        Attended: {liveAttendance.formattedDuration || `${liveAttendance.durationMinutes}m`} • Check-Out: {liveAttendance.checkOutTime ? new Date(liveAttendance.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Logged'}
+                      <div className="flex items-center gap-2">
+                        <span className="text-body-sm font-bold text-emerald-800">
+                          Today's Attendance Recorded ({liveAttendance.status})
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold border border-emerald-200">
+                          Checked Out ✓
+                        </span>
+                      </div>
+                      <span className="text-[12px] text-on-surface-variant font-mono mt-0.5">
+                        Duration: {liveAttendance.formattedDuration || `${liveAttendance.durationMinutes}m`} • In: {liveAttendance.checkInTime ? new Date(liveAttendance.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Logged'} • Out: {liveAttendance.checkOutTime ? new Date(liveAttendance.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Logged'}
                       </span>
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={handleCheckIn}
-                    disabled={isSubmittingAttendance}
-                    className="px-4 py-3 rounded-xl bg-primary text-on-primary font-bold text-body-sm hover:bg-primary/90 shadow-sm transition-all active:scale-95 cursor-pointer flex items-center gap-2 shrink-0 disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">login</span>
-                    <span>Check In Again</span>
-                  </button>
                 </div>
               ) : (
                 /* Not Checked In State: Campus Wi-Fi Status + 1-Click Check-In Button */
@@ -598,7 +598,11 @@ export const StudentDashboard: React.FC = () => {
                       <span className="font-title-md text-title-md text-on-surface font-semibold">
                         {featuredClass.isAttendanceOpen ? 'Live QR Session Active' : 'Attendance Standby'}
                       </span>
-                      {featuredClass.studentAlreadyMarked ? (
+                      {liveAttendance?.hasCompletedToday ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold">
+                          Checked Out ✓
+                        </span>
+                      ) : featuredClass.studentAlreadyMarked || liveAttendance?.isCheckedIn ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-label-sm text-label-sm font-bold">
                           Already Checked In ✓
                         </span>
@@ -625,6 +629,11 @@ export const StudentDashboard: React.FC = () => {
                     <span className="material-symbols-outlined text-[20px]">logout</span>
                     <span>Check Out ({formatStopwatch(elapsedSeconds)})</span>
                   </button>
+                ) : liveAttendance?.hasCompletedToday ? (
+                  <div className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 font-body-sm font-semibold flex items-center justify-center gap-2 shrink-0">
+                    <span className="material-symbols-outlined text-[20px] text-emerald-600">task_alt</span>
+                    <span>Attendance Completed ({liveAttendance.formattedDuration || `${liveAttendance.durationMinutes}m`})</span>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -653,7 +662,7 @@ export const StudentDashboard: React.FC = () => {
                   </p>
                 </div>
               </div>
-              {!liveAttendance?.isCheckedIn && (
+              {!liveAttendance?.isCheckedIn && !liveAttendance?.hasCompletedToday && (
                 <button
                   type="button"
                   onClick={handleCheckIn}
@@ -663,6 +672,12 @@ export const StudentDashboard: React.FC = () => {
                   <span className="material-symbols-outlined text-[18px]">wifi</span>
                   <span>1-Click Check In</span>
                 </button>
+              )}
+              {liveAttendance?.hasCompletedToday && (
+                <div className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 text-body-sm font-semibold flex items-center gap-2 shrink-0">
+                  <span className="material-symbols-outlined text-[18px] text-emerald-600">task_alt</span>
+                  <span>Attendance Recorded for Today</span>
+                </div>
               )}
             </div>
           )}
@@ -1200,7 +1215,7 @@ export const StudentDashboard: React.FC = () => {
                 </span>
               </div>
               <div className="text-[12px] text-outline pt-1 border-t border-surface-container-high/40">
-                Attended duration will be verified and sent to your trainer's dashboard and official institute register.
+                Attended duration will be verified and sent to your trainer's dashboard. Once checked out, attendance for today is finalized and cannot be re-opened.
               </div>
             </div>
 

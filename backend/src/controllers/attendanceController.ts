@@ -316,8 +316,28 @@ export async function scanAttendance(req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    // Step 5: Check-in timestamp and threshold (Late vs Present)
     const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    // Also verify student hasn't already checked out today
+    const completedRecord = await AttendanceRecord.findOne({
+      student: studentProfile._id,
+      attendanceDate: { $gte: startOfDay, $lte: endOfDay },
+      checkInTime: { $exists: true, $ne: null },
+      checkOutTime: { $exists: true, $ne: null },
+    });
+
+    if (completedRecord) {
+      res.status(409).json({
+        success: false,
+        message: 'You have already checked in and checked out for today. Attendance cannot be recorded again.',
+        record: completedRecord,
+      });
+      return;
+    }
+
+    // Step 5: Check-in timestamp and threshold (Late vs Present)
     let status: AttendanceStatus = 'PRESENT';
 
     // Parse class session start time (e.g. 10:30 AM)
@@ -720,7 +740,25 @@ export async function checkInAttendance(req: AuthenticatedRequest, res: Response
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-    // Check if already checked in actively
+    // 1. Check if student has already checked in and checked out for today
+    const completedToday = await AttendanceRecord.findOne({
+      student: studentProfile._id,
+      attendanceDate: { $gte: startOfDay, $lte: endOfDay },
+      checkInTime: { $exists: true, $ne: null },
+      checkOutTime: { $exists: true, $ne: null },
+    });
+
+    if (completedToday) {
+      res.status(400).json({
+        success: false,
+        alreadyCheckedOut: true,
+        message: 'You have already completed attendance (checked in and checked out) for today. Multiple check-ins are not permitted.',
+        record: completedToday,
+      });
+      return;
+    }
+
+    // 2. Check if already checked in actively
     const activeRecord = await AttendanceRecord.findOne({
       student: studentProfile._id,
       attendanceDate: { $gte: startOfDay, $lte: endOfDay },
@@ -793,6 +831,15 @@ export async function checkInAttendance(req: AuthenticatedRequest, res: Response
     });
 
     if (record) {
+      if (record.checkOutTime) {
+        res.status(400).json({
+          success: false,
+          alreadyCheckedOut: true,
+          message: 'You have already checked out of this session today. Check-in cannot be re-opened.',
+          record,
+        });
+        return;
+      }
       record.checkInTime = now;
       record.checkOutTime = undefined;
       record.status = 'PRESENT';
@@ -1007,18 +1054,31 @@ export async function getLiveAttendanceStatus(req: AuthenticatedRequest, res: Re
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-    const todayRecord = await AttendanceRecord.findOne({
+    // Look for active session first (checked in, not yet checked out)
+    const activeRecord = await AttendanceRecord.findOne({
       student: studentProfile._id,
       attendanceDate: { $gte: startOfDay, $lte: endOfDay },
-    }).sort({ createdAt: -1 });
+      checkInTime: { $exists: true, $ne: null },
+      $or: [{ checkOutTime: { $exists: false } }, { checkOutTime: null }],
+    }).sort({ checkInTime: -1 });
 
-    const isCheckedIn = !!(todayRecord && todayRecord.checkInTime && !todayRecord.checkOutTime);
+    // Look for completed session today (checked in and checked out)
+    const completedRecord = await AttendanceRecord.findOne({
+      student: studentProfile._id,
+      attendanceDate: { $gte: startOfDay, $lte: endOfDay },
+      checkInTime: { $exists: true, $ne: null },
+      checkOutTime: { $exists: true, $ne: null },
+    }).sort({ checkOutTime: -1 });
+
+    const todayRecord = activeRecord || completedRecord;
+    const isCheckedIn = !!activeRecord;
+    const hasCompletedToday = !isCheckedIn && !!completedRecord;
     let currentDurationMinutes = 0;
 
-    if (isCheckedIn && todayRecord.checkInTime) {
+    if (isCheckedIn && activeRecord?.checkInTime) {
       currentDurationMinutes = Math.max(
         0,
-        Math.round((now.getTime() - new Date(todayRecord.checkInTime).getTime()) / 60000)
+        Math.round((now.getTime() - new Date(activeRecord.checkInTime).getTime()) / 60000)
       );
     } else if (todayRecord && todayRecord.durationMinutes) {
       currentDurationMinutes = todayRecord.durationMinutes;
@@ -1031,7 +1091,7 @@ export async function getLiveAttendanceStatus(req: AuthenticatedRequest, res: Re
     res.json({
       success: true,
       isCheckedIn,
-      hasCompletedToday: !!(todayRecord && todayRecord.checkOutTime),
+      hasCompletedToday,
       checkInTime: todayRecord?.checkInTime || null,
       checkOutTime: todayRecord?.checkOutTime || null,
       durationMinutes: todayRecord?.durationMinutes || 0,
