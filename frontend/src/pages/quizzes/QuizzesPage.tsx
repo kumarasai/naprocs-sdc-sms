@@ -218,10 +218,12 @@ export const QuizzesPage: React.FC = () => {
       }
 
       const totalQuizPoints = draftQuestions.reduce((acc, q) => acc + (Number(q.points) || 5), 0);
+      const safePassingScore = Math.min(Number(createForm.passingScore) || Math.ceil(totalQuizPoints * 0.6), totalQuizPoints);
 
       const payload = {
         ...createForm,
         totalPoints: totalQuizPoints,
+        passingScore: safePassingScore,
         questions: draftQuestions,
       };
 
@@ -388,7 +390,16 @@ export const QuizzesPage: React.FC = () => {
                   </div>
                 </div>
 
-                {attempt && !isTrainerOrAdmin ? (
+                {isTrainerOrAdmin ? (
+                  <button
+                    onClick={() => handleStartQuiz(quiz)}
+                    type="button"
+                    className="w-full py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm font-semibold border border-surface-container-high transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">visibility</span>
+                    <span>Preview Questions</span>
+                  </button>
+                ) : attempt ? (
                   <div className="w-full py-3 px-4 rounded-xl bg-surface-container-high/60 border border-outline-variant/40 flex items-center justify-between text-body-sm">
                     <div className="flex items-center gap-2 text-on-surface-variant font-medium">
                       <span className="material-symbols-outlined text-emerald-600 text-[20px]">
@@ -406,12 +417,8 @@ export const QuizzesPage: React.FC = () => {
                     type="button"
                     className="w-full py-3 rounded-xl bg-primary text-on-primary font-body-sm font-semibold hover:bg-primary-container shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {isTrainerOrAdmin && attempt ? 'visibility' : 'play_arrow'}
-                    </span>
-                    <span>
-                      {isTrainerOrAdmin && attempt ? 'Preview Questions' : 'Start Assessment'}
-                    </span>
+                    <span className="material-symbols-outlined text-[18px]">play_arrow</span>
+                    <span>Start Assessment</span>
                   </button>
                 )}
               </div>
@@ -420,7 +427,7 @@ export const QuizzesPage: React.FC = () => {
         )}
       </div>
 
-      {/* Interactive Exam Modal for Taking Quiz */}
+      {/* Interactive Exam Modal for Taking Quiz or Previewing for Trainers */}
       {activeQuiz && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-background/60 backdrop-blur-xs">
           <div className="relative w-full max-w-2xl max-h-[90vh] rounded-2xl bg-surface-container-lowest shadow-2xl p-6 flex flex-col gap-5 overflow-y-auto border border-surface-container-high">
@@ -430,7 +437,7 @@ export const QuizzesPage: React.FC = () => {
                   {activeQuiz.title}
                 </h3>
                 <span className="text-[12px] text-primary font-semibold">
-                  Server-Timed Assessment Window
+                  {isTrainerOrAdmin ? 'Faculty Review & Question Inspection (Read-Only Preview)' : 'Server-Timed Assessment Window'}
                 </span>
               </div>
               <button
@@ -442,35 +449,73 @@ export const QuizzesPage: React.FC = () => {
             </div>
 
             {quizResult ? (
-              <div className="flex flex-col items-center text-center py-6 gap-4">
-                <div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                    quizResult.passed
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-rose-100 text-rose-700'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[36px]">
-                    {quizResult.passed ? 'emoji_events' : 'error'}
-                  </span>
-                </div>
+              (() => {
+                const pct = quizResult.percentage ?? 0;
+                let feedbackTitle = quizResult.feedbackTitle || '';
+                let feedbackMessage = quizResult.feedbackMessage || '';
+                let icon = 'emoji_events';
+                let iconColor = 'bg-emerald-100 text-emerald-700';
 
-                <div className="flex flex-col">
-                  <h4 className="font-headline-sm text-[22px] font-bold text-on-surface">
-                    {quizResult.passed ? 'Assessment Passed!' : 'Need More Preparation'}
-                  </h4>
-                  <p className="text-body-md text-on-surface-variant mt-1">
-                    You scored <strong className="text-on-surface">{quizResult.score} / {quizResult.maxPoints} pts</strong> ({quizResult.percentage}%)
-                  </p>
-                </div>
+                if (pct >= 100) {
+                  feedbackTitle = 'Outstanding! Perfect Score! 🏆';
+                  feedbackMessage = 'Excellent work! You answered every question correctly with 100% accuracy!';
+                  icon = 'military_tech';
+                  iconColor = 'bg-amber-100 text-amber-800';
+                } else if (pct >= 80) {
+                  feedbackTitle = 'Great Job! Excellent Performance! 🌟';
+                  feedbackMessage = 'Great work! You scored exceptionally well and demonstrated strong understanding.';
+                  icon = 'emoji_events';
+                  iconColor = 'bg-emerald-100 text-emerald-700';
+                } else if (pct >= 60) {
+                  feedbackTitle = 'Good Effort! Well Done! 👍';
+                  feedbackMessage = 'Good job! You passed the assessment. Keep studying to reach the top tier.';
+                  icon = 'thumb_up';
+                  iconColor = 'bg-blue-100 text-blue-700';
+                } else if (pct >= 40) {
+                  feedbackTitle = 'Nice Try! Keep Practicing! 📚';
+                  feedbackMessage = 'Nice try! You gave a fair attempt. Review the lecture notes and practice to score higher next time.';
+                  icon = 'auto_stories';
+                  iconColor = 'bg-amber-100 text-amber-700';
+                } else {
+                  feedbackTitle = 'Work Hard Next Time! 💪';
+                  feedbackMessage = 'Work hard next time! Don’t worry, review the study materials and discuss with your trainer.';
+                  icon = 'fitness_center';
+                  iconColor = 'bg-rose-100 text-rose-700';
+                }
 
-                <button
-                  onClick={() => setActiveQuiz(null)}
-                  className="px-6 py-2.5 rounded-xl bg-primary text-on-primary font-medium text-body-sm hover:bg-primary-container transition-colors cursor-pointer"
-                >
-                  Return to Quizzes
-                </button>
-              </div>
+                return (
+                  <div className="flex flex-col items-center text-center py-6 gap-4">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center ${iconColor}`}>
+                      <span className="material-symbols-outlined text-[36px]">{icon}</span>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <h4 className="font-headline-sm text-[22px] font-bold text-on-surface">
+                        {feedbackTitle}
+                      </h4>
+                      <p className="text-body-md text-on-surface-variant max-w-md">
+                        {feedbackMessage}
+                      </p>
+                      <div className="mt-2 inline-flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-xl bg-surface-container-high/60 text-body-sm font-semibold text-on-surface">
+                        <span>Score: <strong>{quizResult.score} / {quizResult.maxPoints} pts</strong></span>
+                        <span>•</span>
+                        <span className="text-primary font-bold">{pct}%</span>
+                        <span>•</span>
+                        <span className={pct >= 60 ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
+                          {pct >= 60 ? 'PASSED' : 'NEEDS REVISION'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setActiveQuiz(null)}
+                      className="mt-2 px-6 py-2.5 rounded-xl bg-primary text-on-primary font-medium text-body-sm hover:bg-primary-container transition-colors cursor-pointer"
+                    >
+                      Return to Quizzes
+                    </button>
+                  </div>
+                );
+              })()
             ) : (
               <div className="flex flex-col gap-6">
                 {questions.map((q, idx) => (
@@ -490,20 +535,27 @@ export const QuizzesPage: React.FC = () => {
                         return (
                           <label
                             key={optIdx}
-                            onClick={() => handleSelectOption(q._id, optIdx)}
-                            className={`p-2.5 rounded-lg border text-body-sm flex items-center gap-3 cursor-pointer transition-all ${
-                              isSelected
-                                ? 'bg-primary-fixed/30 border-primary text-on-surface font-semibold'
-                                : 'bg-surface-container-lowest border-surface-container-high text-on-surface hover:bg-surface-container'
+                            onClick={() => !isTrainerOrAdmin && handleSelectOption(q._id, optIdx)}
+                            className={`p-2.5 rounded-lg border text-body-sm flex items-center gap-3 transition-all ${
+                              isTrainerOrAdmin
+                                ? 'bg-surface-container-lowest border-surface-container-high text-on-surface cursor-default'
+                                : isSelected
+                                ? 'bg-primary-fixed/30 border-primary text-on-surface font-semibold cursor-pointer'
+                                : 'bg-surface-container-lowest border-surface-container-high text-on-surface hover:bg-surface-container cursor-pointer'
                             }`}
                           >
-                            <input
-                              type="radio"
-                              name={`q_${q._id}`}
-                              checked={isSelected}
-                              onChange={() => handleSelectOption(q._id, optIdx)}
-                              className="text-primary focus:ring-primary"
-                            />
+                            {!isTrainerOrAdmin && (
+                              <input
+                                type="radio"
+                                name={`q_${q._id}`}
+                                checked={isSelected}
+                                onChange={() => handleSelectOption(q._id, optIdx)}
+                                className="text-primary focus:ring-primary"
+                              />
+                            )}
+                            <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-surface-container text-outline mr-1">
+                              {String.fromCharCode(65 + optIdx)}
+                            </span>
                             <span>{opt}</span>
                           </label>
                         );
@@ -513,21 +565,34 @@ export const QuizzesPage: React.FC = () => {
                 ))}
 
                 <div className="flex items-center gap-3 pt-2">
-                  <button
-                    onClick={handleSubmitQuiz}
-                    disabled={isSubmitting || Object.keys(selectedAnswers).length === 0}
-                    type="button"
-                    className="flex-1 py-3 rounded-xl bg-primary text-on-primary font-medium text-body-sm hover:bg-primary-container transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
-                  >
-                    {isSubmitting ? 'Evaluating Server Answers...' : 'Submit Assessment for Grading'}
-                  </button>
-                  <button
-                    onClick={() => setActiveQuiz(null)}
-                    type="button"
-                    className="px-4 py-3 rounded-xl bg-surface-container text-on-surface text-body-sm hover:bg-surface-container-high cursor-pointer"
-                  >
-                    Cancel
-                  </button>
+                  {isTrainerOrAdmin ? (
+                    <button
+                      onClick={() => setActiveQuiz(null)}
+                      type="button"
+                      className="w-full py-2.5 rounded-xl bg-surface-container-high text-on-surface font-semibold text-body-sm hover:bg-surface-container-highest transition-colors cursor-pointer"
+                    >
+                      Close Faculty Preview
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleSubmitQuiz}
+                        disabled={isSubmitting || Object.keys(selectedAnswers).length === 0}
+                        type="button"
+                        className="flex-1 py-3 rounded-xl bg-primary text-on-primary font-medium text-body-sm hover:bg-primary-container transition-colors disabled:opacity-50 cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">send</span>
+                        <span>{isSubmitting ? 'Evaluating Assessment...' : 'Submit Assessment for Grading'}</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveQuiz(null)}
+                        type="button"
+                        className="px-4 py-3 rounded-xl bg-surface-container text-on-surface text-body-sm hover:bg-surface-container-high cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}

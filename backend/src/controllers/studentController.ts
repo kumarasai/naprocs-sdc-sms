@@ -118,7 +118,7 @@ export async function getStudentDashboard(req: AuthenticatedRequest, res: Respon
 
     // Completed Quiz Attempts & Performance
     const studentQuizAttempts = await QuizAttempt.find({
-      student: student._id,
+      $or: [{ student: student._id }, { user: userId }],
     })
       .populate('quiz', 'title durationMinutes totalPoints passingScore')
       .sort({ submittedAt: -1 });
@@ -128,9 +128,9 @@ export async function getStudentDashboard(req: AuthenticatedRequest, res: Respon
       quizId: qa.quiz?._id,
       quizTitle: qa.quiz?.title || 'Objective Assessment',
       totalScore: qa.totalScore,
-      maxPoints: qa.quiz?.totalPoints || 20,
+      maxPoints: qa.quiz?.totalPoints || qa.totalScore || 20,
       percentage: qa.percentage,
-      passed: qa.passed,
+      passed: qa.passed || qa.percentage >= 60,
       submittedAt: qa.submittedAt,
     }));
 

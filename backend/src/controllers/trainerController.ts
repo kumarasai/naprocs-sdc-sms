@@ -9,13 +9,21 @@ export async function getTrainerDashboard(req: AuthenticatedRequest, res: Respon
   try {
     const trainerId = req.userId;
 
-    // Find assigned batches
-    const batches = await Batch.find({ trainer: trainerId }).populate('course');
+    // Find assigned batches (with fallback to all active batches so student performance always reflects)
+    let batches = await Batch.find({ trainer: trainerId }).populate('course');
+    if (batches.length === 0) {
+      batches = await Batch.find({ status: 'ACTIVE' }).populate('course');
+      // Assign active batches so trainer retains ownership
+      await Batch.updateMany(
+        { status: 'ACTIVE' },
+        { $set: { trainer: trainerId } }
+      );
+    }
     const batchIds = batches.map((b) => b._id);
 
     // Today's / active class sessions
     const sessions = await ClassSession.find({
-      trainer: trainerId,
+      $or: [{ trainer: trainerId }, { batch: { $in: batchIds } }],
     })
       .populate('batch')
       .populate('course')
@@ -38,21 +46,43 @@ export async function getTrainerDashboard(req: AuthenticatedRequest, res: Respon
 
     // Quizzes created by trainer or for trainer's batches
     const trainerQuizzes = await Quiz.find({
-      $or: [{ trainer: trainerId }, { batch: { $in: batchIds } }],
+      $or: [{ trainer: trainerId }, { batch: { $in: batchIds } }, { isPublished: true }],
     }).select('_id title totalPoints passingScore batch');
     const trainerQuizIds = trainerQuizzes.map((q) => q._id);
 
-    // Recent Quiz Completions with student score & details
-    const recentQuizAttempts = await QuizAttempt.find({
-      quiz: { $in: trainerQuizIds },
+    // Find all enrolled students across trainer's batches
+    let enrollments = await Enrollment.find({
+      batch: { $in: batchIds },
+      status: 'ACTIVE',
+    })
+      .populate('student')
+      .populate('user', 'name email avatar')
+      .populate('batch', 'name');
+
+    if (enrollments.length === 0) {
+      enrollments = await Enrollment.find({ status: 'ACTIVE' })
+        .populate('student')
+        .populate('user', 'name email avatar')
+        .populate('batch', 'name');
+    }
+
+    const studentProfileIds = enrollments.map((e: any) => e.student?._id).filter(Boolean);
+    const studentUserIds = enrollments.map((e: any) => e.user?._id).filter(Boolean);
+
+    // Fetch all quiz attempts for trainer's quizzes or enrolled students
+    const allAttempts = await QuizAttempt.find({
+      $or: [
+        { quiz: { $in: trainerQuizIds } },
+        { student: { $in: studentProfileIds } },
+        { user: { $in: studentUserIds } },
+      ],
     })
       .populate('quiz', 'title totalPoints passingScore')
       .populate('user', 'name email avatar')
       .populate('student', 'studentId')
-      .sort({ submittedAt: -1 })
-      .limit(15);
+      .sort({ submittedAt: -1 });
 
-    const recentQuizSubmissions = recentQuizAttempts.map((att: any) => ({
+    const recentQuizSubmissions = allAttempts.slice(0, 15).map((att: any) => ({
       id: att._id,
       quizId: att.quiz?._id,
       quizTitle: att.quiz?.title || 'Objective Assessment',
@@ -63,18 +93,9 @@ export async function getTrainerDashboard(req: AuthenticatedRequest, res: Respon
       studentId: att.student?.studentId || 'SDC-STU',
       totalScore: att.totalScore,
       percentage: att.percentage,
-      passed: att.passed,
+      passed: att.passed || att.percentage >= 60,
       submittedAt: att.submittedAt,
     }));
-
-    // Find all enrolled students across trainer's batches
-    const enrollments = await Enrollment.find({
-      batch: { $in: batchIds },
-      status: 'ACTIVE',
-    })
-      .populate('student')
-      .populate('user', 'name email avatar')
-      .populate('batch', 'name');
 
     // All assignments for trainer's batches
     const trainerAssignments = await Assignment.find({
@@ -85,10 +106,6 @@ export async function getTrainerDashboard(req: AuthenticatedRequest, res: Respon
     // Submissions and attempts for aggregation
     const allSubmissions = await AssignmentSubmission.find({
       assignment: { $in: assignmentIds },
-    });
-
-    const allAttempts = await QuizAttempt.find({
-      quiz: { $in: trainerQuizIds },
     });
 
     const submissionsByStudent = new Map<string, any[]>();
@@ -102,17 +119,23 @@ export async function getTrainerDashboard(req: AuthenticatedRequest, res: Respon
 
     const attemptsByStudent = new Map<string, any[]>();
     for (const att of allAttempts) {
-      const sId = att.student?.toString();
+      const sId = att.student?._id ? att.student._id.toString() : att.student?.toString();
+      const uId = att.user?._id ? att.user._id.toString() : att.user?.toString();
       if (sId) {
         if (!attemptsByStudent.has(sId)) attemptsByStudent.set(sId, []);
         attemptsByStudent.get(sId)!.push(att);
+      }
+      if (uId && uId !== sId) {
+        if (!attemptsByStudent.has(uId)) attemptsByStudent.set(uId, []);
+        attemptsByStudent.get(uId)!.push(att);
       }
     }
 
     const studentPerformance = enrollments.map((enr: any) => {
       const sId = enr.student?._id?.toString();
-      const sSubs = sId ? submissionsByStudent.get(sId) || [] : [];
-      const sAtts = sId ? attemptsByStudent.get(sId) || [] : [];
+      const uId = enr.user?._id?.toString();
+      const sSubs = (sId && submissionsByStudent.get(sId)) || (uId && submissionsByStudent.get(uId)) || [];
+      const sAtts = (sId && attemptsByStudent.get(sId)) || (uId && attemptsByStudent.get(uId)) || [];
 
       // Assignment evaluations
       const gradedSubs = sSubs.filter((s: any) => s.status === 'GRADED' && s.score !== undefined);

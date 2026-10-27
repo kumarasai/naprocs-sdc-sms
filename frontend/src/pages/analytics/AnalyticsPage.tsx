@@ -242,13 +242,14 @@ export const AnalyticsPage: React.FC = () => {
                 <BarChart data={evaluationScoresData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="name" stroke="#737686" fontSize={11} />
-                  <YAxis domain={[0, 20]} stroke="#737686" fontSize={11} />
+                  <YAxis domain={[0, (dataMax: number) => Math.max(20, dataMax || 20)]} stroke="#737686" fontSize={11} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#ffffff',
                       borderRadius: '0.75rem',
                       border: '1px solid #e2e8f0',
                     }}
+                    formatter={(val: any, _name: any, item: any) => [`${val} / ${item.payload?.max || 20} pts`, 'Score']}
                   />
                   <Bar dataKey="score" fill="#4e45d5" radius={[6, 6, 0, 0]} />
                 </BarChart>

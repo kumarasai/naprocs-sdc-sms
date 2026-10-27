@@ -624,7 +624,7 @@ export const TrainerDashboard: React.FC = () => {
                             : 'bg-rose-100 text-rose-800'
                         }`}
                       >
-                        {sub.passed ? 'PASSED' : 'RETAKE NEEDED'}
+                        {sub.passed ? 'PASSED' : 'NEEDS REVISION'}
                       </span>
                     </div>
 

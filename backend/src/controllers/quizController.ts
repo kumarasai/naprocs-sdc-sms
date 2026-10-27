@@ -154,9 +154,37 @@ export async function submitQuiz(req: AuthenticatedRequest, res: Response): Prom
       }
     }
 
-    const maxPoints = quiz.totalPoints || questions.length;
+    const maxPoints = quiz.totalPoints || questions.length || 1;
     const percentage = maxPoints > 0 ? parseFloat(((totalScore / maxPoints) * 100).toFixed(1)) : 100;
-    const passed = totalScore >= quiz.passingScore;
+    const effectivePassingScore = Math.min(quiz.passingScore || Math.ceil(maxPoints * 0.6), maxPoints);
+    const passed = totalScore >= effectivePassingScore || percentage >= 60;
+
+    // Dynamic encouraging feedback based on score percentage
+    let feedbackTitle = '';
+    let feedbackMessage = '';
+    let performanceBadge = '';
+
+    if (percentage >= 100) {
+      feedbackTitle = 'Outstanding! Perfect Score! 🏆';
+      feedbackMessage = 'Excellent work! You answered every question correctly with 100% accuracy!';
+      performanceBadge = 'Excellent';
+    } else if (percentage >= 80) {
+      feedbackTitle = 'Great Job! Excellent Performance! 🌟';
+      feedbackMessage = 'Great work! You scored exceptionally well and demonstrated strong understanding.';
+      performanceBadge = 'Good';
+    } else if (percentage >= 60) {
+      feedbackTitle = 'Good Effort! Well Done! 👍';
+      feedbackMessage = 'Good job! You passed the assessment. Keep studying to reach the top tier.';
+      performanceBadge = 'Good';
+    } else if (percentage >= 40) {
+      feedbackTitle = 'Nice Try! Keep Practicing! 📚';
+      feedbackMessage = 'Nice try! You gave a fair attempt. Review the lecture notes and practice to score higher next time.';
+      performanceBadge = 'Nice try';
+    } else {
+      feedbackTitle = 'Work Hard Next Time! 💪';
+      feedbackMessage = 'Work hard next time! Don’t worry, review the study materials and discuss with your trainer.';
+      performanceBadge = 'Work hard';
+    }
 
     const attempt = await QuizAttempt.create({
       quiz: quiz._id,
@@ -179,7 +207,7 @@ export async function submitQuiz(req: AuthenticatedRequest, res: Response): Prom
         await Notification.create({
           recipient: quiz.trainer,
           title: `Quiz Completed: ${quiz.title}`,
-          message: `${studentName} scored ${totalScore}/${maxPoints} (${percentage}%) in "${quiz.title}".`,
+          message: `${studentName} scored ${totalScore}/${maxPoints} (${percentage}%) in "${quiz.title}". Status: ${performanceBadge}.`,
           type: 'QUIZ',
           link: '/trainer',
           metadata: {
@@ -202,6 +230,7 @@ export async function submitQuiz(req: AuthenticatedRequest, res: Response): Prom
         maxPoints,
         percentage,
         passed,
+        performanceBadge,
         submittedAt: attempt.submittedAt,
       });
 
@@ -220,14 +249,17 @@ export async function submitQuiz(req: AuthenticatedRequest, res: Response): Prom
 
     res.status(201).json({
       success: true,
-      message: passed
-        ? 'Congratulations! You passed the quiz assessment.'
-        : 'Quiz submitted. Your score has been recorded.',
+      message: feedbackMessage,
+      feedbackTitle,
+      performanceBadge,
       result: {
         score: totalScore,
         maxPoints,
         percentage,
         passed,
+        feedbackTitle,
+        feedbackMessage,
+        performanceBadge,
         submittedAt: attempt.submittedAt,
       },
     });
@@ -244,6 +276,14 @@ export async function createQuiz(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
+    const calculatedPoints = totalPoints || (Array.isArray(questions) && questions.length > 0
+      ? questions.reduce((acc: number, q: any) => acc + (Number(q.points) || 1), 0)
+      : 20);
+
+    const safePassingScore = passingScore && Number(passingScore) <= calculatedPoints
+      ? Number(passingScore)
+      : Math.max(1, Math.ceil(calculatedPoints * 0.6));
+
     const quiz = await Quiz.create({
       title,
       description: description || 'Practical objective assessment.',
@@ -252,8 +292,8 @@ export async function createQuiz(req: AuthenticatedRequest, res: Response): Prom
       trainer: req.userId,
       durationMinutes: durationMinutes || 20,
       totalQuestions: questions?.length || 5,
-      totalPoints: totalPoints || 20,
-      passingScore: passingScore || 14,
+      totalPoints: calculatedPoints,
+      passingScore: safePassingScore,
       deadline: deadline ? new Date(deadline) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       isPublished: true,
     });
