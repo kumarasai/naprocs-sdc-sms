@@ -4,7 +4,7 @@ import { StudentProfile } from '../models/Profiles';
 import { Enrollment, Batch } from '../models/Batch';
 import { ClassSession } from '../models/ClassSession';
 import { AttendanceRecord, AttendanceSession } from '../models/Attendance';
-import { Assignment, AssignmentSubmission, Quiz, StudyMaterial } from '../models/Learning';
+import { Assignment, AssignmentSubmission, Quiz, QuizAttempt, StudyMaterial } from '../models/Learning';
 import { Announcement } from '../models/Communication';
 
 export async function getStudentDashboard(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -114,7 +114,31 @@ export async function getStudentDashboard(req: AuthenticatedRequest, res: Respon
       isPublished: true,
     })
       .sort({ scheduledAt: 1 })
-      .limit(3);
+      .limit(5);
+
+    // Completed Quiz Attempts & Performance
+    const studentQuizAttempts = await QuizAttempt.find({
+      student: student._id,
+    })
+      .populate('quiz', 'title durationMinutes totalPoints passingScore')
+      .sort({ submittedAt: -1 });
+
+    const formattedQuizAttempts = studentQuizAttempts.map((qa: any) => ({
+      id: qa._id,
+      quizId: qa.quiz?._id,
+      quizTitle: qa.quiz?.title || 'Objective Assessment',
+      totalScore: qa.totalScore,
+      maxPoints: qa.quiz?.totalPoints || 20,
+      percentage: qa.percentage,
+      passed: qa.passed,
+      submittedAt: qa.submittedAt,
+    }));
+
+    const quizzesTaken = formattedQuizAttempts.length;
+    const quizzesPassed = formattedQuizAttempts.filter((q) => q.passed).length;
+    const avgQuizScore = quizzesTaken > 0
+      ? parseFloat((formattedQuizAttempts.reduce((acc, q) => acc + q.percentage, 0) / quizzesTaken).toFixed(1))
+      : 0;
 
     // Course Study Materials
     const materials = await StudyMaterial.find({
@@ -140,7 +164,7 @@ export async function getStudentDashboard(req: AuthenticatedRequest, res: Respon
       student: student._id,
     });
     const classesAttended = studentRecords.filter(
-      (r) => r.status === 'PRESENT' || r.status === 'LATE' || r.status === 'HALF_DAY'
+      (r: any) => r.status === 'PRESENT' || r.status === 'LATE' || r.status === 'HALF_DAY'
     ).length;
 
     const computedAttendanceRate = conductedClassesCount > 0
@@ -213,6 +237,13 @@ export async function getStudentDashboard(req: AuthenticatedRequest, res: Respon
         weeklyRecords,
         assignments: formattedAssignments,
         quizzes: upcomingQuizzes,
+        quizAttempts: formattedQuizAttempts,
+        quizStats: {
+          quizzesTaken,
+          quizzesPassed,
+          avgQuizScore,
+          passRate: quizzesTaken > 0 ? parseFloat(((quizzesPassed / quizzesTaken) * 100).toFixed(1)) : 0,
+        },
         materials,
         notices,
       },

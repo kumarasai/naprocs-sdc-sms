@@ -32,16 +32,26 @@ export const AnalyticsPage: React.FC = () => {
     fetchAnalytics();
   }, []);
 
-  // Dynamically compute practical evaluation scores from authentic assignments
+  // Graded practical assignments
   const gradedAssignments = (data?.assignments || [])
     .filter((a: any) => a.score !== undefined && a.score !== null)
     .map((a: any) => ({
-      name: a.title?.length > 18 ? a.title.slice(0, 18) + '...' : a.title,
+      name: a.title?.length > 16 ? `[Lab] ${a.title.slice(0, 16)}...` : `[Lab] ${a.title}`,
       score: a.score,
       max: a.totalPoints || 20,
+      type: 'LAB',
     }));
 
-  const evaluationScoresData = gradedAssignments;
+  // Completed quizzes
+  const completedQuizAttempts = (data?.quizAttempts || []).map((q: any) => ({
+    name: q.quizTitle?.length > 16 ? `[Quiz] ${q.quizTitle.slice(0, 16)}...` : `[Quiz] ${q.quizTitle}`,
+    score: q.totalScore,
+    max: q.maxPoints || 20,
+    type: 'QUIZ',
+  }));
+
+  // Merged evaluation scores for the analytical bar chart
+  const evaluationScoresData = [...gradedAssignments, ...completedQuizAttempts];
 
   const currentRate = data?.kpis?.attendanceRate ?? 0;
   const attendanceTrendData = currentRate > 0
@@ -51,9 +61,38 @@ export const AnalyticsPage: React.FC = () => {
       ]
     : [];
 
-  const avgScore = evaluationScoresData.length > 0
-    ? (evaluationScoresData.reduce((acc: number, item: any) => acc + item.score, 0) / evaluationScoresData.length).toFixed(1)
-    : '0.0';
+  const quizAttempts = data?.quizAttempts || [];
+  const quizStats = data?.quizStats || {
+    quizzesTaken: 0,
+    quizzesPassed: 0,
+    avgQuizScore: 0,
+    passRate: 0,
+  };
+
+  const labAvgScore = gradedAssignments.length > 0
+    ? parseFloat((gradedAssignments.reduce((acc: number, item: any) => acc + item.score, 0) / gradedAssignments.length).toFixed(1))
+    : 0;
+
+  // Combined academic score (50% assignments + 50% quizzes)
+  let combinedOverallScore = 0;
+  const normalizedLabPct = Math.min(100, (labAvgScore / 20) * 100);
+
+  if (gradedAssignments.length > 0 && quizStats.quizzesTaken > 0) {
+    combinedOverallScore = parseFloat(((normalizedLabPct * 0.5) + (quizStats.avgQuizScore * 0.5)).toFixed(1));
+  } else if (gradedAssignments.length > 0) {
+    combinedOverallScore = parseFloat(normalizedLabPct.toFixed(1));
+  } else if (quizStats.quizzesTaken > 0) {
+    combinedOverallScore = quizStats.avgQuizScore;
+  }
+
+  const performanceRating =
+    combinedOverallScore >= 85
+      ? 'Excellent'
+      : combinedOverallScore >= 70
+      ? 'Good'
+      : combinedOverallScore >= 50
+      ? 'Average'
+      : 'Needs Attention';
 
   if (isLoading) {
     return (
@@ -79,6 +118,59 @@ export const AnalyticsPage: React.FC = () => {
         <p className="font-body-sm text-body-sm text-on-surface-variant">
           Empirical attendance trendlines, evaluation scores, and syllabus progression
         </p>
+      </div>
+
+      {/* KPI Performance Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Attendance KPI */}
+        <div className="p-4 rounded-2xl bg-surface-container-lowest border border-surface-container-high/40 shadow-xs flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-outline uppercase tracking-wider">Attendance Rate</span>
+            <span className="text-[26px] font-bold text-on-surface mt-1 tabular-nums">{currentRate}%</span>
+            <span className="text-[12px] text-on-surface-variant mt-0.5">Physical session presence</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-primary-fixed/40 text-primary">
+            <span className="material-symbols-outlined text-[24px]">how_to_reg</span>
+          </div>
+        </div>
+
+        {/* Practical Labs KPI */}
+        <div className="p-4 rounded-2xl bg-surface-container-lowest border border-surface-container-high/40 shadow-xs flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-outline uppercase tracking-wider">Lab Submissions</span>
+            <span className="text-[26px] font-bold text-on-surface mt-1 tabular-nums">{gradedAssignments.length}</span>
+            <span className="text-[12px] text-on-surface-variant mt-0.5">Avg: {labAvgScore} / 20 pts</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-secondary-container/40 text-secondary">
+            <span className="material-symbols-outlined text-[24px]">terminal</span>
+          </div>
+        </div>
+
+        {/* Quiz Performance KPI */}
+        <div className="p-4 rounded-2xl bg-surface-container-lowest border border-surface-container-high/40 shadow-xs flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-outline uppercase tracking-wider">Quiz Assessments</span>
+            <span className="text-[26px] font-bold text-emerald-700 mt-1 tabular-nums">{quizStats.quizzesTaken}</span>
+            <span className="text-[12px] text-on-surface-variant mt-0.5">
+              Avg: {quizStats.avgQuizScore}% ({quizStats.quizzesPassed} passed)
+            </span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700">
+            <span className="material-symbols-outlined text-[24px]">quiz</span>
+          </div>
+        </div>
+
+        {/* Combined Overall Score KPI */}
+        <div className="p-4 rounded-2xl bg-surface-container-lowest border border-surface-container-high/40 shadow-xs flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-outline uppercase tracking-wider">Overall Score</span>
+            <span className="text-[26px] font-bold text-primary mt-1 tabular-nums">{combinedOverallScore}%</span>
+            <span className="text-[12px] font-semibold text-emerald-700 mt-0.5">{performanceRating}</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+            <span className="material-symbols-outlined text-[24px]">grade</span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -133,14 +225,14 @@ export const AnalyticsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Practical Evaluation Scores BarChart */}
+        {/* Practical Evaluation & Quiz Scores BarChart */}
         <div className="p-6 rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container-high/40 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="font-headline-sm text-[16px] text-on-surface font-bold">
-              Practical Lab &amp; Quiz Marks (Score / 20)
+              Practical Lab &amp; Quiz Marks (Score / Max)
             </h3>
             <span className="text-[12px] font-bold text-emerald-700">
-              Avg: {avgScore} pts
+              {evaluationScoresData.length} Evaluations
             </span>
           </div>
 
@@ -164,12 +256,86 @@ export const AnalyticsPage: React.FC = () => {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-on-surface-variant">
                 <span className="material-symbols-outlined text-outline text-[36px] mb-2">bar_chart</span>
-                <p className="font-body-md font-medium">No graded evaluations yet.</p>
-                <p className="text-body-sm text-outline mt-0.5">Assigned lab and quiz scores will populate here upon mentor evaluation.</p>
+                <p className="font-body-md font-medium">No graded evaluations or quiz scores yet.</p>
+                <p className="text-body-sm text-outline mt-0.5">Assigned practical labs and quizzes will chart here upon completion.</p>
               </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Quiz Performance Analysis Breakdown */}
+      <div className="p-6 rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container-high/40 flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-primary text-[24px]">fact_check</span>
+            <h3 className="font-headline-sm text-[18px] text-on-surface font-bold">
+              Quiz Assessments &amp; Objective Evaluation Results
+            </h3>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-surface-container text-on-surface text-label-sm font-semibold self-start sm:self-auto">
+            {quizAttempts.length} Completed
+          </span>
+        </div>
+
+        {quizAttempts.length === 0 ? (
+          <div className="py-10 text-center flex flex-col items-center justify-center gap-2 text-on-surface-variant">
+            <span className="material-symbols-outlined text-outline text-[36px]">quiz</span>
+            <span className="font-body-md font-semibold text-on-surface">No quiz assessments completed yet</span>
+            <p className="font-body-sm text-outline max-w-sm">
+              Head to the Quizzes &amp; Automated Assessments tab to take your scheduled course quizzes. Completed test scores will display here immediately.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-surface-container-high/40">
+            <table className="w-full text-left text-body-sm">
+              <thead className="bg-surface-container-low text-[11px] font-bold text-outline uppercase tracking-wider border-b border-surface-container-high/40">
+                <tr>
+                  <th className="py-3 px-4">Assessment Title</th>
+                  <th className="py-3 px-4 text-center">Score Awarded</th>
+                  <th className="py-3 px-4 text-center">Percentage</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-right">Submitted Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-container-high/30">
+                {quizAttempts.map((qa: any) => (
+                  <tr key={qa.id} className="hover:bg-surface-container-low/50 transition-colors">
+                    <td className="py-3.5 px-4 font-bold text-on-surface">
+                      {qa.quizTitle}
+                    </td>
+                    <td className="py-3.5 px-4 text-center font-mono font-bold tabular-nums">
+                      {qa.totalScore} / {qa.maxPoints} pts
+                    </td>
+                    <td className="py-3.5 px-4 text-center font-bold text-primary tabular-nums">
+                      {qa.percentage}%
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          qa.passed
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {qa.passed ? 'PASSED' : 'NEEDS REVISION'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right text-outline text-[12px]">
+                      {new Date(qa.submittedAt).toLocaleDateString([], {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

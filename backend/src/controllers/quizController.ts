@@ -63,6 +63,28 @@ export async function getQuizQuestions(req: AuthenticatedRequest, res: Response)
       return;
     }
 
+    // Check if student already attempted this quiz (retakes are not allowed)
+    if (req.userRole === 'STUDENT') {
+      const student = await StudentProfile.findOne({ user: req.userId });
+      if (student) {
+        const existingAttempt = await QuizAttempt.findOne({ quiz: quizId, student: student._id });
+        if (existingAttempt) {
+          res.status(400).json({
+            success: false,
+            message: 'You have already completed this quiz. Retakes are not permitted.',
+            alreadySubmitted: true,
+            attempt: {
+              totalScore: existingAttempt.totalScore,
+              percentage: existingAttempt.percentage,
+              passed: existingAttempt.passed,
+              submittedAt: existingAttempt.submittedAt,
+            },
+          });
+          return;
+        }
+      }
+    }
+
     // Never return correctOptionIndex before student submission
     const questions = await QuizQuestion.find({ quiz: quizId })
       .select('-correctOptionIndex')
@@ -88,6 +110,24 @@ export async function submitQuiz(req: AuthenticatedRequest, res: Response): Prom
     const quiz = await Quiz.findById(quizId);
     if (!quiz) {
       res.status(404).json({ success: false, message: 'Quiz not found.' });
+      return;
+    }
+
+    // Enforce one-time attempt check
+    const existingAttempt = await QuizAttempt.findOne({ quiz: quiz._id, student: student._id });
+    if (existingAttempt) {
+      res.status(400).json({
+        success: false,
+        message: 'You have already completed this quiz. Quizzes can only be attempted once.',
+        alreadySubmitted: true,
+        result: {
+          score: existingAttempt.totalScore,
+          maxPoints: quiz.totalPoints,
+          percentage: existingAttempt.percentage,
+          passed: existingAttempt.passed,
+          submittedAt: existingAttempt.submittedAt,
+        },
+      });
       return;
     }
 
@@ -130,11 +170,59 @@ export async function submitQuiz(req: AuthenticatedRequest, res: Response): Prom
       passed,
     });
 
+    // Notify trainer and emit real-time event
+    try {
+      const studentUser = await User.findById(req.userId).select('name email');
+      const studentName = studentUser?.name || 'A student';
+
+      if (quiz.trainer) {
+        await Notification.create({
+          recipient: quiz.trainer,
+          title: `Quiz Completed: ${quiz.title}`,
+          message: `${studentName} scored ${totalScore}/${maxPoints} (${percentage}%) in "${quiz.title}".`,
+          type: 'QUIZ',
+          link: '/trainer',
+          metadata: {
+            quizId: quiz._id,
+            studentId: student._id,
+            score: totalScore,
+            percentage,
+          },
+          isRead: false,
+        });
+      }
+
+      const io = getIO();
+      io.emit('quiz_submitted', {
+        quizId: quiz._id,
+        quizTitle: quiz.title,
+        studentId: student.studentId,
+        studentName,
+        score: totalScore,
+        maxPoints,
+        percentage,
+        passed,
+        submittedAt: attempt.submittedAt,
+      });
+
+      if (quiz.trainer) {
+        io.to(`user:${quiz.trainer.toString()}`).emit('notification_received', {
+          title: `Quiz Completed: ${quiz.title}`,
+          message: `${studentName} scored ${totalScore}/${maxPoints} (${percentage}%) in "${quiz.title}".`,
+          type: 'QUIZ',
+          link: '/trainer',
+          createdAt: new Date(),
+        });
+      }
+    } catch (sockErr) {
+      console.warn('[QuizController] Notification/Socket emit warning:', sockErr);
+    }
+
     res.status(201).json({
       success: true,
       message: passed
         ? 'Congratulations! You passed the quiz assessment.'
-        : 'Quiz submitted. Review the feedback and retry during the next testing window.',
+        : 'Quiz submitted. Your score has been recorded.',
       result: {
         score: totalScore,
         maxPoints,
@@ -271,6 +359,16 @@ export async function deleteQuiz(req: AuthenticatedRequest, res: Response): Prom
     await Quiz.findByIdAndDelete(quizId);
     await QuizQuestion.deleteMany({ quiz: quizId });
     await QuizAttempt.deleteMany({ quiz: quizId });
+    await Notification.deleteMany({ 'metadata.quizId': quizId });
+
+    // Emit real-time quiz_deleted event so all connected student portals remove it immediately
+    try {
+      const io = getIO();
+      io.emit('quiz_deleted', { quizId });
+    } catch (sockErr) {
+      console.warn('[QuizController] Socket emit warning on deleteQuiz:', sockErr);
+    }
+
     res.json({ success: true, message: 'Quiz deleted successfully.' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

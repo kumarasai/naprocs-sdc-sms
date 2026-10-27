@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSocket } from '../../contexts/SocketContext';
 import confetti from 'canvas-confetti';
 
 interface QuestionDraft {
@@ -80,13 +81,45 @@ export const QuizzesPage: React.FC = () => {
     }
   };
 
+  const { socket } = useSocket();
+
   useEffect(() => {
     fetchQuizzes();
   }, []);
 
+  // Real-time synchronization: quiz deletion & new quizzes
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleQuizDeleted = ({ quizId }: { quizId: string }) => {
+      setQuizzes((prev) => prev.filter((q) => (q.id || q._id) !== quizId));
+      if (activeQuiz && (activeQuiz.id === quizId || activeQuiz._id === quizId)) {
+        setActiveQuiz(null);
+        alert('This assessment was deleted by the instructor.');
+      }
+    };
+
+    const handleNewQuiz = () => {
+      fetchQuizzes();
+    };
+
+    socket.on('quiz_deleted', handleQuizDeleted);
+    socket.on('new_quiz', handleNewQuiz);
+
+    return () => {
+      socket.off('quiz_deleted', handleQuizDeleted);
+      socket.off('new_quiz', handleNewQuiz);
+    };
+  }, [socket, activeQuiz]);
+
   const handleStartQuiz = async (quiz: any) => {
+    if (quiz.attempt && !isTrainerOrAdmin) {
+      alert('You have already completed this assessment. Assessments can only be attempted once.');
+      return;
+    }
+
     try {
-      const res = await api.get(`/quizzes/${quiz.id}/questions`);
+      const res = await api.get(`/quizzes/${quiz.id || quiz._id}/questions`);
       if (res.data.success) {
         setActiveQuiz(quiz);
         setQuestions(res.data.questions);
@@ -355,16 +388,32 @@ export const QuizzesPage: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleStartQuiz(quiz)}
-                  type="button"
-                  className="w-full py-3 rounded-xl bg-primary text-on-primary font-body-sm font-semibold hover:bg-primary-container shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {attempt ? 'restart_alt' : 'play_arrow'}
-                  </span>
-                  <span>{attempt ? 'Retake Assessment' : 'Start Assessment'}</span>
-                </button>
+                {attempt && !isTrainerOrAdmin ? (
+                  <div className="w-full py-3 px-4 rounded-xl bg-surface-container-high/60 border border-outline-variant/40 flex items-center justify-between text-body-sm">
+                    <div className="flex items-center gap-2 text-on-surface-variant font-medium">
+                      <span className="material-symbols-outlined text-emerald-600 text-[20px]">
+                        verified
+                      </span>
+                      <span>Completed • Single Attempt Used</span>
+                    </div>
+                    <span className="text-[12px] font-bold text-on-surface">
+                      {attempt.totalScore} / {quiz.totalPoints} pts ({attempt.percentage}%)
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleStartQuiz(quiz)}
+                    type="button"
+                    className="w-full py-3 rounded-xl bg-primary text-on-primary font-body-sm font-semibold hover:bg-primary-container shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {isTrainerOrAdmin && attempt ? 'visibility' : 'play_arrow'}
+                    </span>
+                    <span>
+                      {isTrainerOrAdmin && attempt ? 'Preview Questions' : 'Start Assessment'}
+                    </span>
+                  </button>
+                )}
               </div>
             );
           })

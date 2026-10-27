@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { DEFAULT_AVATAR } from '../../utils/avatar';
+import { useSocket } from '../../contexts/SocketContext';
 
 export const TrainerDashboard: React.FC = () => {
   const [data, setData] = useState<any>(null);
@@ -107,9 +108,22 @@ export const TrainerDashboard: React.FC = () => {
     }
   };
 
+  const { socket } = useSocket();
+
   useEffect(() => {
     fetchTrainerData();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleQuizSubmitted = () => {
+      fetchTrainerData();
+    };
+    socket.on('quiz_submitted', handleQuizSubmitted);
+    return () => {
+      socket.off('quiz_submitted', handleQuizSubmitted);
+    };
+  }, [socket]);
 
   // Handlers
   const handleCreateAssignment = async (e: React.FormEvent) => {
@@ -223,11 +237,15 @@ export const TrainerDashboard: React.FC = () => {
   const batches = data?.batches || [];
   const sessions = data?.sessions || [];
   const pendingSubmissions = data?.pendingSubmissions || [];
+  const recentQuizSubmissions = data?.recentQuizSubmissions || [];
+  const studentPerformance = data?.studentPerformance || [];
   const stats = data?.stats || {
     batchesCount: batches.length,
     assignmentsCount: 0,
     pendingSubmissionsCount: pendingSubmissions.length,
     materialsCount: 0,
+    quizzesCount: 0,
+    quizAttemptsCount: 0,
   };
 
   return (
@@ -298,7 +316,7 @@ export const TrainerDashboard: React.FC = () => {
       </div>
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
         <div className="p-5 rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container-high/40 flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-[11px] font-bold text-outline uppercase tracking-wider">Assigned Batches</span>
@@ -329,6 +347,17 @@ export const TrainerDashboard: React.FC = () => {
           </div>
           <div className="p-3 rounded-2xl bg-amber-50 text-amber-700">
             <span className="material-symbols-outlined text-[26px]">pending_actions</span>
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container-high/40 flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-outline uppercase tracking-wider">Quiz Completions</span>
+            <span className="text-[28px] font-bold text-emerald-700 mt-1 tabular-nums">{stats.quizAttemptsCount || 0}</span>
+            <span className="text-[12px] text-on-surface-variant mt-0.5">{stats.quizzesCount || 0} active tests</span>
+          </div>
+          <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-700">
+            <span className="material-symbols-outlined text-[26px]">quiz</span>
           </div>
         </div>
 
@@ -548,6 +577,75 @@ export const TrainerDashboard: React.FC = () => {
             )}
           </div>
 
+          {/* Recent Quiz Scores Card */}
+          <div className="p-6 rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container-high/40 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[22px]">quiz</span>
+                <h3 className="font-headline-sm text-[18px] text-on-surface font-bold">
+                  Recent Quiz Scores
+                </h3>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed text-[11px] font-bold">
+                {recentQuizSubmissions.length} Completed
+              </span>
+            </div>
+
+            {recentQuizSubmissions.length === 0 ? (
+              <div className="py-8 text-center flex flex-col items-center justify-center gap-2 text-on-surface-variant">
+                <span className="material-symbols-outlined text-outline text-[32px]">assignment_turned_in</span>
+                <span className="font-body-md font-semibold text-on-surface">No quiz attempts yet</span>
+                <p className="font-body-sm text-outline max-w-xs">
+                  When students complete online quizzes, their scores will immediately reflect here.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 max-h-[380px] overflow-y-auto pr-1">
+                {recentQuizSubmissions.map((sub: any) => (
+                  <div
+                    key={sub.id}
+                    className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/30 flex flex-col gap-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={DEFAULT_AVATAR}
+                          alt=""
+                          className="w-6 h-6 rounded-full object-cover bg-surface-container-high ring-1 ring-outline/10"
+                        />
+                        <span className="font-bold text-on-surface text-[14px]">
+                          {sub.studentName}
+                        </span>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                          sub.passed
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {sub.passed ? 'PASSED' : 'RETAKE NEEDED'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[12px] text-on-surface-variant">
+                      <span className="truncate max-w-[170px] font-medium text-on-surface">
+                        {sub.quizTitle}
+                      </span>
+                      <span className="font-bold text-primary font-mono">
+                        {sub.totalScore} / {sub.maxPoints} pts ({sub.percentage}%)
+                      </span>
+                    </div>
+
+                    <span className="text-[11px] text-outline">
+                      Submitted: {new Date(sub.submittedAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Quick Shortcuts */}
           <div className="p-5 rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container-high/40 flex flex-col gap-3">
             <span className="text-label-sm font-bold text-outline uppercase tracking-wider">
@@ -611,6 +709,143 @@ export const TrainerDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Student Academic & Quiz Performance Scoreboard */}
+      <div className="p-6 rounded-2xl bg-surface-container-lowest shadow-sm border border-surface-container-high/40 flex flex-col gap-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-primary text-[24px]">leaderboard</span>
+              <h3 className="font-headline-sm text-[20px] text-on-surface font-bold">
+                Student Performance &amp; Evaluation Scoreboard
+              </h3>
+            </div>
+            <p className="text-body-sm text-on-surface-variant mt-0.5">
+              Comprehensive score calculated based on practical assignment submissions and quiz assessment marks
+            </p>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-surface-container text-on-surface text-label-sm font-semibold self-start sm:self-auto">
+            {studentPerformance.length} Enrolled Students
+          </span>
+        </div>
+
+        {studentPerformance.length === 0 ? (
+          <div className="py-12 text-center flex flex-col items-center justify-center gap-2 text-on-surface-variant">
+            <span className="material-symbols-outlined text-outline text-[40px]">group_off</span>
+            <span className="font-body-md font-semibold text-on-surface">No enrolled students in active batches</span>
+            <p className="font-body-sm text-outline max-w-md">
+              Once students are enrolled in your assigned cohorts and submit assignments or quizzes, their performance ratings will calculate automatically.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-surface-container-high/40">
+            <table className="w-full text-left text-body-sm">
+              <thead className="bg-surface-container-low text-[11px] font-bold text-outline uppercase tracking-wider border-b border-surface-container-high/40">
+                <tr>
+                  <th className="py-3 px-4">Student</th>
+                  <th className="py-3 px-4">Cohort Batch</th>
+                  <th className="py-3 px-4 text-center">Assignments Solved</th>
+                  <th className="py-3 px-4 text-center">Assignment Avg</th>
+                  <th className="py-3 px-4 text-center">Quizzes Taken</th>
+                  <th className="py-3 px-4 text-center">Quiz Score Avg</th>
+                  <th className="py-3 px-4 text-right min-w-[180px]">Combined Performance</th>
+                  <th className="py-3 px-4 text-center">Rating</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-container-high/30">
+                {studentPerformance.map((stu: any) => {
+                  const ratingBadgeClass =
+                    stu.performanceRating === 'Excellent'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : stu.performanceRating === 'Good'
+                      ? 'bg-blue-100 text-blue-800 border-blue-300'
+                      : stu.performanceRating === 'Average'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-rose-100 text-rose-800 border-rose-300';
+
+                  const barColor =
+                    stu.overallPerformanceScore >= 85
+                      ? 'bg-emerald-600'
+                      : stu.overallPerformanceScore >= 70
+                      ? 'bg-blue-600'
+                      : stu.overallPerformanceScore >= 50
+                      ? 'bg-amber-500'
+                      : 'bg-rose-500';
+
+                  return (
+                    <tr key={stu.studentId} className="hover:bg-surface-container-low/50 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={DEFAULT_AVATAR}
+                            alt=""
+                            className="w-9 h-9 rounded-full object-cover bg-surface-container-high shrink-0 ring-1 ring-outline/10"
+                          />
+                          <div className="flex flex-col">
+                            <span className="font-bold text-on-surface text-[14px] leading-tight">
+                              {stu.name}
+                            </span>
+                            <span className="text-[11px] text-outline font-mono mt-0.5">
+                              {stu.studentId}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-on-surface-variant font-medium text-[13px]">
+                        {stu.batchName}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-medium tabular-nums">
+                        {stu.assignmentsSubmitted}
+                      </td>
+                      <td className="py-3.5 px-4 text-center tabular-nums">
+                        {stu.gradedAssignmentsCount > 0 ? (
+                          <span className="font-bold text-on-surface">
+                            {stu.assignmentAvgScore} / 20 pts
+                          </span>
+                        ) : (
+                          <span className="text-outline text-[12px]">Pending</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-medium tabular-nums">
+                        {stu.quizzesTaken}
+                      </td>
+                      <td className="py-3.5 px-4 text-center tabular-nums">
+                        {stu.quizzesTaken > 0 ? (
+                          <span className="font-bold text-primary">
+                            {stu.quizAvgScore}%
+                          </span>
+                        ) : (
+                          <span className="text-outline text-[12px]">--</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="font-bold text-on-surface text-[14px] tabular-nums">
+                            {stu.overallPerformanceScore}%
+                          </span>
+                          <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden max-w-[140px]">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                              style={{ width: `${Math.min(100, stu.overallPerformanceScore)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${ratingBadgeClass}`}
+                        >
+                          {stu.performanceRating}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* CREATE ASSIGNMENT MODAL */}
