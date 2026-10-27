@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { DEFAULT_AVATAR } from '../../utils/avatar';
 
 export const TrainerDashboard: React.FC = () => {
   const [data, setData] = useState<any>(null);
@@ -237,7 +238,7 @@ export const TrainerDashboard: React.FC = () => {
           <img
             alt="Trainer Avatar"
             className="w-16 h-16 rounded-2xl object-cover ring-2 ring-primary/20 shadow-xs bg-surface-container-high"
-            src={data?.trainer?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(data?.trainer?.name || 'Trainer')}`}
+            src={DEFAULT_AVATAR}
           />
           <div className="flex flex-col">
             <div className="flex items-center gap-2">

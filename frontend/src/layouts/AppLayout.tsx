@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { api } from '../services/api';
 import { FirstTimePasswordModal } from '../components/auth/FirstTimePasswordModal';
+import { DEFAULT_AVATAR } from '../utils/avatar';
 
 export const AppLayout: React.FC = () => {
   const { user, profile, role, logout } = useAuth();
@@ -636,10 +637,7 @@ export const AppLayout: React.FC = () => {
               <img
                 alt="Profile"
                 className="w-8 h-8 rounded-full object-cover ring-2 ring-primary/20 bg-surface-container-high"
-                src={
-                  user?.avatar ||
-                  `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.name || user?.email || 'User')}`
-                }
+                src={DEFAULT_AVATAR}
               />
               <div className="flex flex-col text-left hidden sm:flex">
                 <span className="font-body-sm text-body-sm font-semibold text-on-surface leading-tight">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { DEFAULT_AVATAR } from '../../utils/avatar';
 
 export const AdminTrainers: React.FC = () => {
   const [trainers, setTrainers] = useState<any[]>([]);
@@ -243,7 +244,7 @@ export const AdminTrainers: React.FC = () => {
                       <img
                         alt="Avatar"
                         className="w-8 h-8 rounded-full object-cover ring-1 ring-primary/20"
-                        src={t.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(t.name || 'Trainer')}`}
+                        src={DEFAULT_AVATAR}
                       />
                       <div className="flex flex-col">
                         <span className="font-bold">{t.name}</span>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { api } from '../../services/api';
+import { DEFAULT_AVATAR } from '../../utils/avatar';
 
 export const AdminDashboard: React.FC = () => {
   const [data, setData] = useState<any>(null);
@@ -496,10 +497,7 @@ export const AdminDashboard: React.FC = () => {
                   <td className="py-3 px-3">
                     <div className="flex items-center gap-3">
                       <img
-                        src={
-                          st.avatar ||
-                          `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(st.name || 'student')}`
-                        }
+                        src={DEFAULT_AVATAR}
                         alt="Avatar"
                         className="w-8 h-8 rounded-full bg-surface-container-high"
                       />

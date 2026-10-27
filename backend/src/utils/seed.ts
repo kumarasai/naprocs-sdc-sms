@@ -45,7 +45,7 @@ export async function seedDatabase() {
     passwordHash: 'Admin@12345',
     phone: '+91 98765 00001',
     role: 'ADMIN',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256',
+    avatar: '/default-avatar.svg',
   });
   await adminUser.save();
 
@@ -56,7 +56,7 @@ export async function seedDatabase() {
     passwordHash: 'Trainer@12345',
     phone: '+91 98765 00002',
     role: 'TRAINER',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCyZ44DQoslasDUsiL15318INob5wB4BWZL1C1rT4Kh5EmtosWnOqH0_DKjcGe-iIJ4VCwGWmOHDU8GwxHX3xvhAHgJYd27o8Yu84D069D5wUEkoj-tExBfH21EZrw2wnwsvscCbZGKXgsPvnZml0yz0wGW5C-xuOxKunR-Fsp2pLB3_3cL5WPT4AZ78k5Kp3SLUVcq6oPtRFQjApiFVK9gu6CfgU6gujjI8RwJ58FeAdHaPCohhNyVDg',
+    avatar: '/default-avatar.svg',
   });
   await trainerUser.save();
 
@@ -76,7 +76,7 @@ export async function seedDatabase() {
     passwordHash: 'Student@12345',
     phone: '+91 98765 00003',
     role: 'STUDENT',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAVK-Qe_5QhAX1lNiSBVx8ddbeGWm-1gpfE-1zWCSnsqIqA8uMBtLafP_DZfn2Y-ITX5DGZjegzsOv86M0cpM5PlRn8gq2PxX8vPO3lKlvo_gQZrUd-ua68U3Sy1RWupU1f_vppX7BA9HpkD4V9-IiaCooN0v8j2UpngLNvlW7sgEPAPPNSG4po4GjRpI2snEmpVjVb4nJ2k3dSOAm0cdG7a3Uoofgv9M5CnvRBusPpLJzIvOY-S4OJmA',
+    avatar: '/default-avatar.svg',
   });
   await studentUser.save();
 
@@ -108,7 +108,7 @@ export async function seedDatabase() {
       email: peer.email,
       passwordHash: 'Student@12345',
       role: 'STUDENT',
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${peer.name}`,
+      avatar: '/default-avatar.svg',
     });
     await pUser.save();
     const pProf = await StudentProfile.create({

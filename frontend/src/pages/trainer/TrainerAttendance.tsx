@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useSocket } from '../../contexts/SocketContext';
+import { DEFAULT_AVATAR } from '../../utils/avatar';
 
 export const TrainerAttendance: React.FC = () => {
   const [activeSession, setActiveSession] = useState<any>(null);
@@ -370,12 +371,7 @@ export const TrainerAttendance: React.FC = () => {
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-3">
                           <img
-                            src={
-                              rec.user?.avatar ||
-                              `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                                rec.user?.name || 'student'
-                              )}`
-                            }
+                            src={DEFAULT_AVATAR}
                             alt="Avatar"
                             className="w-9 h-9 rounded-full object-cover bg-surface-container-high"
                           />

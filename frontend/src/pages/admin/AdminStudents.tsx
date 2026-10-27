@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { DEFAULT_AVATAR } from '../../utils/avatar';
 
 export const AdminStudents: React.FC = () => {
   const [students, setStudents] = useState<any[]>([]);
@@ -343,10 +344,7 @@ export const AdminStudents: React.FC = () => {
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={
-                              st.avatar ||
-                              `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(st.name || 'student')}`
-                            }
+                            src={DEFAULT_AVATAR}
                             alt={st.name}
                             className="w-10 h-10 rounded-full object-cover bg-surface-container-high"
                           />

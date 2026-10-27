@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { StudentDashboardData } from '../../types';
 import { useSocket } from '../../contexts/SocketContext';
+import { DEFAULT_AVATAR } from '../../utils/avatar';
 
 export const StudentDashboard: React.FC = () => {
   const [data, setData] = useState<StudentDashboardData | null>(null);
@@ -555,10 +556,7 @@ export const StudentDashboard: React.FC = () => {
                   <img
                     className="w-12 h-12 rounded-xl object-cover shrink-0 shadow-xs ring-1 ring-primary/20 bg-surface-container-high"
                     alt="Trainer"
-                    src={
-                      featuredClass.trainer?.avatar ||
-                      `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(featuredClass.trainer?.name || 'Trainer')}`
-                    }
+                    src={DEFAULT_AVATAR}
                   />
                   <div className="flex flex-col">
                     <span className="font-body-sm text-body-sm font-bold text-on-surface">
@@ -945,10 +943,7 @@ export const StudentDashboard: React.FC = () => {
             <div className="flex items-center gap-3.5 p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/30">
               <img
                 className="w-12 h-12 rounded-xl object-cover shrink-0 bg-surface-container-high ring-1 ring-surface-container-highest"
-                src={
-                  student?.avatar ||
-                  `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(student?.name || 'Student')}`
-                }
+                src={DEFAULT_AVATAR}
                 alt={student?.name || 'Student'}
               />
               <div className="flex flex-col min-w-0">
