@@ -10,6 +10,9 @@ import {
   deleteStudent,
   deleteTrainer,
   createBatch,
+  assignTrainerToBatch,
+  assignTrainerToStudent,
+  autoLinkAllToPrimaryTrainer,
 } from '../controllers/adminController';
 import { authenticateToken } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
@@ -22,6 +25,7 @@ router.get('/dashboard', getAdminDashboard);
 router.post('/students', registerStudent);
 router.get('/students', getAllStudents);
 router.patch('/students/:studentId/status', updateStudentStatus);
+router.patch('/students/:studentId/trainer', assignTrainerToStudent);
 router.delete('/students/:studentId', deleteStudent);
 
 router.post('/trainers', registerTrainer);
@@ -30,5 +34,8 @@ router.patch('/trainers/:trainerId/status', updateTrainerStatus);
 router.delete('/trainers/:trainerId', deleteTrainer);
 
 router.post('/batches', createBatch);
+router.patch('/batches/:batchId/trainer', assignTrainerToBatch);
+router.post('/auto-link-trainer', autoLinkAllToPrimaryTrainer);
 
 export default router;
+

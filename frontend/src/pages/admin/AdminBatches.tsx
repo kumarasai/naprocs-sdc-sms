@@ -98,8 +98,62 @@ export const AdminBatches: React.FC = () => {
     );
   }
 
+  const [assigningBatchId, setAssigningBatchId] = useState<string | null>(null);
+  const [bannerMessage, setBannerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleAssignTrainer = async (batchId: string, trainerId: string) => {
+    setAssigningBatchId(batchId);
+    try {
+      const res = await api.patch(`/admin/batches/${batchId}/trainer`, { trainerId });
+      if (res.data.success) {
+        setBannerMessage({ type: 'success', text: res.data.message || 'Trainer assigned successfully!' });
+        fetchData();
+        setTimeout(() => setBannerMessage(null), 4000);
+      }
+    } catch (err: any) {
+      setBannerMessage({ type: 'error', text: err.response?.data?.message || 'Failed to assign trainer.' });
+    } finally {
+      setAssigningBatchId(null);
+    }
+  };
+
+  const handleAutoLinkPrimaryTrainer = async () => {
+    if (!window.confirm('Connect all batches and enrolled students to the active primary trainer?')) return;
+    try {
+      const res = await api.post('/admin/auto-link-trainer');
+      if (res.data.success) {
+        setBannerMessage({ type: 'success', text: res.data.message || 'All batches and students linked to primary trainer!' });
+        fetchData();
+        setTimeout(() => setBannerMessage(null), 5000);
+      }
+    } catch (err: any) {
+      setBannerMessage({ type: 'error', text: err.response?.data?.message || 'Failed to auto-sync trainer.' });
+    }
+  };
+
   return (
     <div className="flex flex-col w-full pb-16 pt-6 gap-6">
+      {/* Alert Banner */}
+      {bannerMessage && (
+        <div
+          className={`p-4 rounded-xl flex items-center justify-between text-body-sm font-semibold shadow-xs ${
+            bannerMessage.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px]">
+              {bannerMessage.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            <span>{bannerMessage.text}</span>
+          </div>
+          <button onClick={() => setBannerMessage(null)} className="text-outline hover:text-on-surface cursor-pointer">
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -113,74 +167,113 @@ export const AdminBatches: React.FC = () => {
             Batches &amp; Classrooms
           </h1>
           <p className="font-body-sm text-body-sm text-on-surface-variant">
-            Manage cohort schedules, assigned mentors, physical lab venues, and maximum seat capacities
+            Manage cohort schedules, assigned mentors, physical lab venues, and designated trainers
           </p>
         </div>
 
-        <button
-          onClick={() => setShowModal(true)}
-          type="button"
-          className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-body-sm font-semibold hover:bg-primary-container shadow-xs transition-colors flex items-center gap-2 cursor-pointer shrink-0"
-        >
-          <span className="material-symbols-outlined text-[18px]">add_circle</span>
-          <span>Create New Batch</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={handleAutoLinkPrimaryTrainer}
+            type="button"
+            className="px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm font-semibold border border-surface-container-high transition-colors flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
+            title="Automatically connects all active batches and students to the active trainer"
+          >
+            <span className="material-symbols-outlined text-[18px] text-primary">sync</span>
+            <span>Auto-Connect All to Primary Trainer</span>
+          </button>
+
+          <button
+            onClick={() => setShowModal(true)}
+            type="button"
+            className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-body-sm font-semibold hover:bg-primary-container shadow-xs transition-colors flex items-center gap-2 cursor-pointer shrink-0"
+          >
+            <span className="material-symbols-outlined text-[18px]">add_circle</span>
+            <span>Create New Batch</span>
+          </button>
+        </div>
       </div>
 
       {/* Batches Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {batches.map((batch) => (
-          <div
-            key={batch._id}
-            className="p-6 rounded-2xl bg-surface-container-lowest border border-surface-container-high/40 shadow-xs flex flex-col justify-between gap-5 hover:shadow-md transition-all"
-          >
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="px-3 py-1 rounded-full bg-primary-fixed/30 text-primary font-mono text-[11px] font-bold">
-                  {batch.batchCode}
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                  {batch.status || 'ACTIVE'}
-                </span>
-              </div>
+        {batches.map((batch) => {
+          const currentTrainerId = batch.trainer?._id || batch.trainer?.id || (typeof batch.trainer === 'string' ? batch.trainer : '');
 
-              <div>
-                <h3 className="font-headline-sm text-[18px] text-on-surface font-bold">
-                  {batch.name}
-                </h3>
-                <p className="text-body-sm text-on-surface-variant line-clamp-1 mt-0.5">
-                  {batch.cohortName || 'Offline Cohort'}
-                </p>
-              </div>
+          return (
+            <div
+              key={batch._id}
+              className="p-6 rounded-2xl bg-surface-container-lowest border border-surface-container-high/40 shadow-xs flex flex-col justify-between gap-5 hover:shadow-md transition-all"
+            >
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-3 py-1 rounded-full bg-primary-fixed/30 text-primary font-mono text-[11px] font-bold">
+                    {batch.batchCode}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                    {batch.status || 'ACTIVE'}
+                  </span>
+                </div>
 
-              <div className="flex flex-col gap-2 pt-2 border-t border-surface-container-high/40 text-[13px] text-on-surface-variant">
-                {batch.timing && (
+                <div>
+                  <h3 className="font-headline-sm text-[18px] text-on-surface font-bold">
+                    {batch.name}
+                  </h3>
+                  <p className="text-body-sm text-on-surface-variant line-clamp-1 mt-0.5">
+                    {batch.cohortName || 'Offline Cohort'}
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2 border-t border-surface-container-high/40 text-[13px] text-on-surface-variant">
+                  {batch.timing && (
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-primary">schedule</span>
+                      <span className="font-medium text-on-surface">{batch.timing}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[18px] text-primary">schedule</span>
-                    <span className="font-medium text-on-surface">{batch.timing}</span>
+                    <span className="material-symbols-outlined text-[18px] text-secondary">meeting_room</span>
+                    <span>{batch.classroom || 'Classroom TBA'}{batch.roomNumber ? ` (${batch.roomNumber})` : ''}</span>
                   </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-secondary">meeting_room</span>
-                  <span>{batch.classroom || 'Classroom TBA'}{batch.roomNumber ? ` (${batch.roomNumber})` : ''}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-outline">group</span>
+                    <span>Enrolled: <strong className="text-on-surface">{batch.enrolledStudentsCount || 0}</strong> / {batch.maxCapacity || 40} seats</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-outline">group</span>
-                  <span>Enrolled: <strong className="text-on-surface">{batch.enrolledStudentsCount || 0}</strong> / {batch.maxCapacity || 40} seats</span>
+              </div>
+
+              <div className="pt-3 border-t border-surface-container-high/40 flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[12px]">
+                  <span className="text-outline font-medium">
+                    {batch.course?.title || batch.course?.name || 'Assigned Course'}
+                  </span>
+                  <span className="text-primary font-bold">
+                    Lead: {batch.trainer?.name || 'Unassigned'}
+                  </span>
+                </div>
+
+                {/* Designated Trainer Selector */}
+                <div className="flex flex-col gap-1 mt-1 p-2.5 rounded-xl bg-surface-container-low border border-surface-container-high/40">
+                  <label className="text-[11px] font-bold text-outline uppercase tracking-wider flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px] text-primary">school</span>
+                    <span>Connect To Trainer</span>
+                  </label>
+                  <select
+                    value={currentTrainerId}
+                    disabled={assigningBatchId === batch._id}
+                    onChange={(e) => handleAssignTrainer(batch._id, e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-surface-container-high bg-surface-container-lowest text-body-sm text-on-surface font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="" disabled>-- Select Trainer --</option>
+                    {trainers.map((t) => (
+                      <option key={t.id} value={t.userId || t.id}>
+                        {t.name} ({t.trainerId || t.email})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
-
-            <div className="pt-3 border-t border-surface-container-high/40 flex items-center justify-between">
-              <span className="text-[12px] text-outline font-medium">
-                {batch.course?.title || batch.course?.name || 'Assigned Course'}
-              </span>
-              <span className="text-[12px] text-primary font-semibold">
-                Lead: {batch.trainer?.name || 'Dr. Sundaram'}
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Create Batch Modal */}

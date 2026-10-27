@@ -108,12 +108,15 @@ app.get('/', (req, res) => {
   });
 });
 
+import { syncSingleTrainerAndStudents } from './utils/trainerSync';
+
 // Centralized error handling
 app.use(errorHandler);
 
 // Start server
 async function startServer() {
   await connectDB();
+  await syncSingleTrainerAndStudents();
   server.listen(config.port, () => {
     console.log(`=======================================================`);
     console.log(`  🚀 Naprocs LMS Backend Server running on port ${config.port}`);

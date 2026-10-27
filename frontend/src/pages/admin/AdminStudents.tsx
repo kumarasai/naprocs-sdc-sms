@@ -6,6 +6,7 @@ export const AdminStudents: React.FC = () => {
   const [students, setStudents] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
+  const [trainers, setTrainers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
@@ -14,6 +15,12 @@ export const AdminStudents: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [alertBanner, setAlertBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [assignTrainerModal, setAssignTrainerModal] = useState<{
+    open: boolean;
+    student: any;
+    selectedTrainerId: string;
+    selectedBatchId: string;
+  } | null>(null);
 
   // Form State
   const [form, setForm] = useState({
@@ -31,10 +38,11 @@ export const AdminStudents: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [studentsRes, batchesRes, coursesRes] = await Promise.all([
+      const [studentsRes, batchesRes, coursesRes, trainersRes] = await Promise.all([
         api.get(`/admin/students?_t=${Date.now()}`),
         api.get('/courses/batches'),
         api.get('/courses/courses'),
+        api.get('/admin/trainers'),
       ]);
 
       if (studentsRes.data.success) setStudents(studentsRes.data.students);
@@ -49,6 +57,7 @@ export const AdminStudents: React.FC = () => {
         }
       }
       if (coursesRes.data.success) setCourses(coursesRes.data.courses);
+      if (trainersRes.data.success) setTrainers(trainersRes.data.trainers);
     } catch (err) {
       console.error('Failed to load students:', err);
     } finally {
@@ -143,6 +152,49 @@ export const AdminStudents: React.FC = () => {
     }
   };
 
+  const handleAssignStudentTrainer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignTrainerModal?.student) return;
+    try {
+      const res = await api.patch(`/admin/students/${assignTrainerModal.student.id}/trainer`, {
+        trainerId: assignTrainerModal.selectedTrainerId,
+        batchId: assignTrainerModal.selectedBatchId,
+      });
+      if (res.data.success) {
+        setAlertBanner({
+          type: 'success',
+          message: res.data.message || `Student successfully linked to designated trainer!`,
+        });
+        setAssignTrainerModal(null);
+        fetchData();
+      }
+    } catch (err: any) {
+      setAlertBanner({
+        type: 'error',
+        message: err.response?.data?.message || 'Failed to update student trainer.',
+      });
+    }
+  };
+
+  const handleAutoLinkPrimaryTrainer = async () => {
+    if (!window.confirm('Connect all students and cohort batches to the active primary trainer?')) return;
+    try {
+      const res = await api.post('/admin/auto-link-trainer');
+      if (res.data.success) {
+        setAlertBanner({
+          type: 'success',
+          message: res.data.message || 'All students and batches successfully connected to primary trainer!',
+        });
+        fetchData();
+      }
+    } catch (err: any) {
+      setAlertBanner({
+        type: 'error',
+        message: err.response?.data?.message || 'Failed to auto-sync trainer.',
+      });
+    }
+  };
+
   const filteredStudents = students.filter((st) => {
     const matchesSearch =
       st.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -187,14 +239,26 @@ export const AdminStudents: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowModal(true)}
-          type="button"
-          className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-body-sm font-semibold hover:bg-primary-container shadow-xs transition-colors flex items-center gap-2 cursor-pointer shrink-0"
-        >
-          <span className="material-symbols-outlined text-[18px]">person_add</span>
-          <span>Register New Student</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={handleAutoLinkPrimaryTrainer}
+            type="button"
+            className="px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body-sm font-semibold border border-surface-container-high transition-colors flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
+            title="Automatically connects all registered students to the active primary trainer"
+          >
+            <span className="material-symbols-outlined text-[18px] text-primary">sync</span>
+            <span>Auto-Connect All to Primary Trainer</span>
+          </button>
+
+          <button
+            onClick={() => setShowModal(true)}
+            type="button"
+            className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-body-sm font-semibold hover:bg-primary-container shadow-xs transition-colors flex items-center gap-2 cursor-pointer shrink-0"
+          >
+            <span className="material-symbols-outlined text-[18px]">person_add</span>
+            <span>Register New Student</span>
+          </button>
+        </div>
       </div>
 
       {/* Alert / Notification Banner */}
@@ -314,7 +378,7 @@ export const AdminStudents: React.FC = () => {
                   College &amp; Qualification
                 </th>
                 <th className="py-3.5 px-4 font-label-sm text-outline font-bold uppercase tracking-wider text-[11px]">
-                  Batch Enrolled
+                  Cohort &amp; Lead Trainer
                 </th>
                 <th className="py-3.5 px-4 font-label-sm text-outline font-bold uppercase tracking-wider text-[11px]">
                   Attendance %
@@ -372,9 +436,15 @@ export const AdminStudents: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-surface-container-low font-medium text-[12px] text-on-surface border border-surface-container-high/50">
-                          {st.batchName || 'Unassigned'}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="px-2.5 py-0.5 rounded-lg bg-surface-container-low font-medium text-[12px] text-on-surface border border-surface-container-high/50 w-fit">
+                            {st.batchName || 'Unassigned'}
+                          </span>
+                          <span className="text-[11px] text-primary font-semibold flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px]">school</span>
+                            <span>Trainer: {st.trainerName || 'Unassigned'}</span>
+                          </span>
+                        </div>
                       </td>
 
                       <td className="py-3.5 px-4">
@@ -416,6 +486,22 @@ export const AdminStudents: React.FC = () => {
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() =>
+                              setAssignTrainerModal({
+                                open: true,
+                                student: st,
+                                selectedTrainerId: st.trainerId || (trainers[0]?.userId || trainers[0]?.id || ''),
+                                selectedBatchId: st.batchId || (batches[0]?._id || ''),
+                              })
+                            }
+                            type="button"
+                            className="px-2.5 py-1.5 rounded-lg text-label-sm font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer flex items-center gap-1"
+                            title="Connect student to trainer or assign batch"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">school</span>
+                            <span>Trainer</span>
+                          </button>
                           <button
                             onClick={() => handleToggleStatus(st.id, st.status)}
                             type="button"
@@ -705,6 +791,121 @@ export const AdminStudents: React.FC = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Trainer & Cohort Batch Modal */}
+      {assignTrainerModal?.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-background/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg rounded-2xl bg-surface-container-lowest shadow-2xl p-6 flex flex-col gap-5 border border-surface-container-high animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-surface-container-high">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                  <span className="material-symbols-outlined text-[22px]">school</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
+                    Trainer &amp; Cohort Designation
+                  </span>
+                  <h3 className="font-headline-sm text-[18px] text-on-surface font-bold">
+                    Connect Student to Trainer
+                  </h3>
+                </div>
+              </div>
+              <button
+                onClick={() => setAssignTrainerModal(null)}
+                className="p-1 rounded-lg text-outline hover:text-on-surface cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/40 flex items-center gap-3">
+              <img
+                src={DEFAULT_AVATAR}
+                alt=""
+                className="w-10 h-10 rounded-full object-cover bg-surface-container-high"
+              />
+              <div className="flex flex-col">
+                <span className="font-bold text-on-surface text-[14px]">
+                  {assignTrainerModal.student?.name}
+                </span>
+                <span className="text-[12px] text-on-surface-variant font-mono">
+                  {assignTrainerModal.student?.studentId} • {assignTrainerModal.student?.email}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleAssignStudentTrainer} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-label-sm font-semibold text-on-surface flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px] text-primary">person</span>
+                  <span>Select Lead Trainer</span>
+                </label>
+                <select
+                  value={assignTrainerModal.selectedTrainerId}
+                  onChange={(e) =>
+                    setAssignTrainerModal({
+                      ...assignTrainerModal,
+                      selectedTrainerId: e.target.value,
+                    })
+                  }
+                  className="px-3 py-2.5 rounded-xl border border-surface-container-high bg-surface-container-low text-body-sm text-on-surface font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="" disabled>-- Select Faculty Trainer --</option>
+                  {trainers.map((t) => (
+                    <option key={t.id} value={t.userId || t.id}>
+                      {t.name} ({t.trainerId || t.email})
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-outline">
+                  The designated mentor will review quizzes, practical lab assignments, and attendance logs for this student.
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-label-sm font-semibold text-on-surface flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px] text-secondary">groups</span>
+                  <span>Enrolled Cohort Batch</span>
+                </label>
+                <select
+                  value={assignTrainerModal.selectedBatchId}
+                  onChange={(e) =>
+                    setAssignTrainerModal({
+                      ...assignTrainerModal,
+                      selectedBatchId: e.target.value,
+                    })
+                  }
+                  className="px-3 py-2.5 rounded-xl border border-surface-container-high bg-surface-container-low text-body-sm text-on-surface font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="" disabled>-- Select Cohort Batch --</option>
+                  {batches.map((b) => (
+                    <option key={b._id} value={b._id}>
+                      {b.name} ({b.batchCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-surface-container-high">
+                <button
+                  type="button"
+                  onClick={() => setAssignTrainerModal(null)}
+                  className="px-4 py-2 rounded-xl text-body-sm font-semibold text-on-surface-variant hover:bg-surface-container-low transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-primary text-on-primary text-body-sm font-semibold hover:bg-primary-container shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">done</span>
+                  <span>Save Trainer Connection</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

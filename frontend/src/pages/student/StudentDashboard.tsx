@@ -363,8 +363,8 @@ export const StudentDashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* Four Summary Metric Cards */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 my-3">
+      {/* Five Summary Metric Cards */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 my-3">
         {/* Card 1: Attendance Progress */}
         <div className="p-5 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border border-surface-container-high/40">
           <div className="flex items-start justify-between">
@@ -477,7 +477,40 @@ export const StudentDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 4: Curriculum Velocity */}
+        {/* Card 4: Quiz Performance */}
+        <div className="p-5 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border border-surface-container-high/40">
+          <div className="flex items-start justify-between">
+            <div className="flex flex-col">
+              <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider font-semibold">
+                Quiz Avg Score
+              </span>
+              <span className="font-display-lg text-display-lg text-emerald-700 font-bold mt-1 tabular-nums">
+                {data?.quizStats?.avgQuizScore ?? 0}%
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700">
+              <span className="material-symbols-outlined text-[22px]">quiz</span>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between pt-2 border-t border-surface-container-low">
+            <span className={`px-2 py-0.5 rounded-full font-label-sm text-label-sm font-semibold ${
+              (data?.quizStats?.quizzesTaken ?? 0) === 0
+                ? 'bg-surface-container text-on-surface-variant'
+                : (data?.quizStats?.passRate ?? 0) >= 60
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-rose-50 text-rose-700'
+            }`}>
+              {(data?.quizStats?.quizzesTaken ?? 0) === 0
+                ? 'No Quizzes Yet'
+                : `${data?.quizStats?.quizzesPassed || 0}/${data?.quizStats?.quizzesTaken || 0} Passed`}
+            </span>
+            <span className="font-tabular-data text-tabular-data text-on-surface-variant font-medium">
+              {data?.quizStats?.passRate ?? 0}% Pass Rate
+            </span>
+          </div>
+        </div>
+
+        {/* Card 5: Curriculum Velocity */}
         <div className="p-5 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow border border-surface-container-high/40">
           <div className="flex items-start justify-between">
             <div className="flex flex-col">
@@ -916,6 +949,138 @@ export const StudentDashboard: React.FC = () => {
                   <span className="material-symbols-outlined text-outline text-[32px]">assignment</span>
                   <span className="font-body-md font-medium">No assignments assigned yet.</span>
                   <span className="font-body-sm text-outline">Practical tasks issued by your instructor will appear here.</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* d) My Quiz Performance & Evaluations (100% Dynamic from MongoDB Atlas) */}
+          <div className="p-6 rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-4 border border-surface-container-high/40">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-[22px]">quiz</span>
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                    My Quiz Performance &amp; Evaluations
+                  </h3>
+                </div>
+                <span className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                  Official objective assessments and mentor evaluations
+                </span>
+              </div>
+              <a
+                href="/quizzes"
+                className="font-label-sm text-label-sm text-primary font-semibold hover:underline flex items-center gap-1 self-start sm:self-auto"
+              >
+                <span>View Quizzes ({data?.quizAttempts?.length || 0})</span>
+                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+              </a>
+            </div>
+
+            <div className="flex flex-col gap-3 mt-1">
+              {data?.quizAttempts && data.quizAttempts.length > 0 ? (
+                data.quizAttempts.map((attempt: any) => {
+                  const pct = attempt.percentage ?? 0;
+                  const isPassed = attempt.passed || pct >= 60;
+
+                  let feedbackMessage = 'Good Effort! Well Done! 👍';
+                  if (pct === 100) feedbackMessage = 'Outstanding! Perfect Score! 🏆';
+                  else if (pct >= 80) feedbackMessage = 'Great Job! Excellent Performance! 🌟';
+                  else if (pct >= 60) feedbackMessage = 'Good Effort! Well Done! 👍';
+                  else if (pct >= 40) feedbackMessage = 'Nice Try! Keep Practicing! 📚';
+                  else feedbackMessage = 'Work Hard Next Time! 💪';
+
+                  return (
+                    <div
+                      key={attempt.id}
+                      className="p-4 rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 border border-surface-container-high/30"
+                    >
+                      <div className="flex items-start gap-3.5">
+                        <div
+                          className={`p-2.5 rounded-lg bg-surface-container-lowest shadow-xs ${
+                            isPassed ? 'text-emerald-700' : 'text-rose-700'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[22px]">
+                            {isPassed ? 'verified' : 'history_edu'}
+                          </span>
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="font-body-md text-body-md font-bold text-on-surface">
+                              {attempt.quizTitle}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-md font-label-sm text-label-sm font-semibold ${
+                                isPassed
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {isPassed ? 'PASSED' : 'NEEDS REVISION'}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2.5 mt-1 font-body-sm text-body-sm text-on-surface-variant">
+                            <span className="flex items-center gap-1 text-outline font-medium">
+                              <span className="material-symbols-outlined text-[16px]">schedule</span>
+                              <span>
+                                {new Date(attempt.submittedAt).toLocaleDateString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            </span>
+                            <span>•</span>
+                            <span className="text-primary font-semibold font-mono">
+                              Score: {attempt.totalScore} / {attempt.maxPoints} pts ({pct}%)
+                            </span>
+                          </div>
+
+                          <p className="font-body-sm text-body-sm text-primary font-semibold mt-1">
+                            {feedbackMessage}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1.5 shrink-0 self-end md:self-center min-w-[140px]">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[14px] font-bold text-on-surface">
+                            {pct}%
+                          </span>
+                          <span className="text-[12px] text-outline font-medium">
+                            ({attempt.totalScore}/{attempt.maxPoints})
+                          </span>
+                        </div>
+                        <div className="w-32 bg-surface-container-high h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              isPassed ? 'bg-emerald-500' : 'bg-rose-500'
+                            }`}
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-on-surface-variant flex flex-col items-center gap-1.5">
+                  <span className="material-symbols-outlined text-outline text-[32px]">quiz</span>
+                  <span className="font-body-md font-medium">No quiz evaluations attended yet.</span>
+                  <span className="font-body-sm text-outline">
+                    Complete your scheduled objective assessments in the Quizzes section to view your scores and feedback here.
+                  </span>
+                  <a
+                    href="/quizzes"
+                    className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary text-body-sm font-semibold hover:bg-primary/90 transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">play_circle</span>
+                    <span>Go to Available Quizzes</span>
+                  </a>
                 </div>
               )}
             </div>

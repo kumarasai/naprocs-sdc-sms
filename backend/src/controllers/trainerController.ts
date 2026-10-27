@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { Batch, Enrollment } from '../models/Batch';
+import { StudentProfile } from '../models/Profiles';
 import { ClassSession } from '../models/ClassSession';
 import { AttendanceSession, AttendanceRecord } from '../models/Attendance';
 import { Assignment, AssignmentSubmission, StudyMaterial, Quiz, QuizAttempt } from '../models/Learning';
@@ -50,27 +51,39 @@ export async function getTrainerDashboard(req: AuthenticatedRequest, res: Respon
     }).select('_id title totalPoints passingScore batch');
     const trainerQuizIds = trainerQuizzes.map((q) => q._id);
 
-    // Find all enrolled students across trainer's batches
+    // Find all enrolled students across trainer's batches (with fallback to all active profiles)
     let enrollments = await Enrollment.find({
       batch: { $in: batchIds },
-      status: 'ACTIVE',
     })
       .populate('student')
       .populate('user', 'name email avatar')
       .populate('batch', 'name');
 
     if (enrollments.length === 0) {
-      enrollments = await Enrollment.find({ status: 'ACTIVE' })
+      enrollments = await Enrollment.find({})
         .populate('student')
         .populate('user', 'name email avatar')
         .populate('batch', 'name');
+    }
+
+    // Guarantee that every registered student profile is included
+    const enrolledStudentIds = new Set(enrollments.map((e: any) => e.student?._id?.toString()).filter(Boolean));
+    const allStudentProfiles = await StudentProfile.find({}).populate('user', 'name email avatar');
+    for (const sp of allStudentProfiles) {
+      if (!enrolledStudentIds.has(sp._id.toString())) {
+        enrollments.push({
+          student: sp,
+          user: sp.user,
+          batch: batches[0] || { name: 'Active Cohort' },
+        } as any);
+      }
     }
 
     const studentProfileIds = enrollments.map((e: any) => e.student?._id).filter(Boolean);
     const studentUserIds = enrollments.map((e: any) => e.user?._id).filter(Boolean);
 
     // Fetch all quiz attempts for trainer's quizzes or enrolled students
-    const allAttempts = await QuizAttempt.find({
+    let allAttempts = await QuizAttempt.find({
       $or: [
         { quiz: { $in: trainerQuizIds } },
         { student: { $in: studentProfileIds } },
@@ -81,6 +94,14 @@ export async function getTrainerDashboard(req: AuthenticatedRequest, res: Respon
       .populate('user', 'name email avatar')
       .populate('student', 'studentId')
       .sort({ submittedAt: -1 });
+
+    if (allAttempts.length === 0) {
+      allAttempts = await QuizAttempt.find({})
+        .populate('quiz', 'title totalPoints passingScore')
+        .populate('user', 'name email avatar')
+        .populate('student', 'studentId')
+        .sort({ submittedAt: -1 });
+    }
 
     const recentQuizSubmissions = allAttempts.slice(0, 15).map((att: any) => ({
       id: att._id,

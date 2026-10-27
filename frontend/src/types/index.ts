@@ -100,6 +100,14 @@ export interface StudentDashboardData {
   weeklyRecords: any[];
   assignments: any[];
   quizzes: any[];
+  quizAttempts?: any[];
+  quizStats?: {
+    quizzesTaken: number;
+    quizzesPassed: number;
+    avgQuizScore: number;
+    passRate: number;
+  };
   materials: any[];
   notices: any[];
 }
+

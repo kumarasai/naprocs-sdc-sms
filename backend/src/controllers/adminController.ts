@@ -227,11 +227,18 @@ export async function getAllStudents(req: AuthenticatedRequest, res: Response): 
       .populate('user', 'name email phone avatar status')
       .sort({ createdAt: -1 });
 
-    const enrollments = await Enrollment.find().populate('batch', 'name batchCode');
+    const enrollments = await Enrollment.find().populate({
+      path: 'batch',
+      select: 'name batchCode trainer',
+      populate: { path: 'trainer', select: 'name email' },
+    });
     const enrollmentMap = new Map(enrollments.map((e) => [e.student.toString(), e]));
 
     let result = students.map((s) => {
       const enr = enrollmentMap.get(s._id.toString());
+      const batchObj = enr?.batch as any;
+      const trainerObj = batchObj?.trainer as any;
+
       return {
         id: s._id,
         studentId: s.studentId,
@@ -239,11 +246,16 @@ export async function getAllStudents(req: AuthenticatedRequest, res: Response): 
         email: (s.user as any)?.email,
         phone: (s.user as any)?.phone,
         status: (s.user as any)?.status,
-        avatar: (s.user as any)?.avatar,
+        avatar: '/default-avatar.svg',
         college: s.college,
         qualification: s.qualification,
         graduationYear: s.graduationYear,
-        batchName: (enr?.batch as any)?.name || 'Unassigned',
+        batchId: batchObj?._id,
+        batchName: batchObj?.name || 'Unassigned',
+        batchCode: batchObj?.batchCode || '',
+        trainerId: trainerObj?._id,
+        trainerName: trainerObj?.name || 'Unassigned',
+        trainerEmail: trainerObj?.email || '',
         attendancePercentage: enr?.attendancePercentage ?? s.attendanceHealthPercentage,
         enrolledClassesAttended: `${enr?.classesAttended || 0} / ${enr?.totalEligibleClasses || 0}`,
       };
@@ -459,3 +471,144 @@ export async function createBatch(req: AuthenticatedRequest, res: Response): Pro
     res.status(500).json({ success: false, message: error.message });
   }
 }
+
+// ---------------- ASSIGN TRAINER TO BATCH (ADMIN ONLY) ----------------
+export async function assignTrainerToBatch(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { batchId } = req.params;
+    const { trainerId } = req.body;
+
+    if (!trainerId) {
+      res.status(400).json({ success: false, message: 'Trainer ID is required.' });
+      return;
+    }
+
+    let trainerUser = await User.findById(trainerId);
+    let trainerProfile = await TrainerProfile.findOne({ $or: [{ _id: trainerId }, { user: trainerId }] });
+    if (!trainerUser && trainerProfile) {
+      trainerUser = await User.findById(trainerProfile.user);
+    }
+    if (!trainerUser || trainerUser.role !== 'TRAINER') {
+      res.status(400).json({ success: false, message: 'Selected user is not an active trainer.' });
+      return;
+    }
+
+    const batch = await Batch.findByIdAndUpdate(
+      batchId,
+      { trainer: trainerUser._id },
+      { new: true }
+    ).populate('trainer', 'name email');
+
+    if (!batch) {
+      res.status(404).json({ success: false, message: 'Batch not found.' });
+      return;
+    }
+
+    // Update TrainerProfile assignedBatches
+    await TrainerProfile.updateOne(
+      { user: trainerUser._id },
+      { $addToSet: { assignedBatches: batch._id } }
+    );
+
+    res.json({
+      success: true,
+      message: `Batch "${batch.name}" successfully assigned to trainer ${trainerUser.name}.`,
+      batch,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+// ---------------- ASSIGN TRAINER / BATCH TO STUDENT (ADMIN ONLY) ----------------
+export async function assignTrainerToStudent(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { studentId } = req.params;
+    const { trainerId, batchId } = req.body;
+
+    const studentProfile = await StudentProfile.findById(studentId);
+    if (!studentProfile) {
+      res.status(404).json({ success: false, message: 'Student profile not found.' });
+      return;
+    }
+
+    let trainerUser = trainerId ? await User.findById(trainerId) : null;
+    if (!trainerUser && trainerId) {
+      const tp = await TrainerProfile.findOne({ $or: [{ _id: trainerId }, { user: trainerId }] });
+      if (tp) trainerUser = await User.findById(tp.user);
+    }
+
+    if (batchId) {
+      const targetBatch = await Batch.findById(batchId);
+      if (!targetBatch) {
+        res.status(404).json({ success: false, message: 'Target batch not found.' });
+        return;
+      }
+      if (trainerUser) {
+        targetBatch.trainer = trainerUser._id as any;
+        await targetBatch.save();
+      }
+      await Enrollment.findOneAndUpdate(
+        { student: studentProfile._id },
+        {
+          $set: {
+            student: studentProfile._id,
+            user: studentProfile.user,
+            batch: targetBatch._id,
+            course: targetBatch.course,
+            status: 'ACTIVE',
+          },
+        },
+        { upsert: true }
+      );
+    } else if (trainerUser) {
+      let trainerBatch = await Batch.findOne({ trainer: trainerUser._id, status: 'ACTIVE' });
+      if (!trainerBatch) {
+        trainerBatch = await Batch.findOne({ status: 'ACTIVE' });
+        if (trainerBatch) {
+          trainerBatch.trainer = trainerUser._id as any;
+          await trainerBatch.save();
+        }
+      }
+      if (trainerBatch) {
+        await Enrollment.findOneAndUpdate(
+          { student: studentProfile._id },
+          {
+            $set: {
+              student: studentProfile._id,
+              user: studentProfile.user,
+              batch: trainerBatch._id,
+              course: trainerBatch.course,
+              status: 'ACTIVE',
+            },
+          },
+          { upsert: true }
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Student successfully connected to ${trainerUser?.name || 'designated cohort'}.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+// ---------------- AUTO-LINK ALL STUDENTS TO PRIMARY TRAINER (ADMIN ONLY) ----------------
+import { syncSingleTrainerAndStudents } from '../utils/trainerSync';
+
+export async function autoLinkAllToPrimaryTrainer(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const result = await syncSingleTrainerAndStudents();
+    if (!result.success) {
+      res.status(400).json(result);
+      return;
+    }
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
