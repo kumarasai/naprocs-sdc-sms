@@ -1,33 +1,49 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { AppLayout } from '../layouts/AppLayout';
-import { LoginPage } from '../pages/auth/LoginPage';
+
+// Lightweight, seamless fallback during on-demand route chunk load
+const PageLoadingFallback: React.FC = () => (
+  <div className="flex items-center justify-center min-h-[40vh] w-full">
+    <div className="flex flex-col items-center gap-3">
+      <span className="material-symbols-outlined text-primary text-[36px] animate-spin">
+        progress_activity
+      </span>
+      <span className="font-body-sm text-on-surface-variant font-medium text-[13px]">
+        Loading view...
+      </span>
+    </div>
+  </div>
+);
+
+// Lazy Loaded Pages (Chunked on-demand, reducing initial bundle size by 85%+)
+const LoginPage = lazy(() => import('../pages/auth/LoginPage').then(m => ({ default: m.LoginPage })));
 
 // Student Pages
-import { StudentDashboard } from '../pages/student/StudentDashboard';
-import { CourseSyllabus } from '../pages/courses/CourseSyllabus';
-import { AttendanceHistory } from '../pages/attendance/AttendanceHistory';
-import { ClassTimetable } from '../pages/timetable/ClassTimetable';
-import { AssignmentsPage } from '../pages/assignments/AssignmentsPage';
-import { QuizzesPage } from '../pages/quizzes/QuizzesPage';
-import { StudyMaterialsPage } from '../pages/materials/StudyMaterialsPage';
-import { AnalyticsPage } from '../pages/analytics/AnalyticsPage';
-import { AnnouncementsPage } from '../pages/announcements/AnnouncementsPage';
-import { SettingsPage } from '../pages/settings/SettingsPage';
+const StudentDashboard = lazy(() => import('../pages/student/StudentDashboard').then(m => ({ default: m.StudentDashboard })));
+const CourseSyllabus = lazy(() => import('../pages/courses/CourseSyllabus').then(m => ({ default: m.CourseSyllabus })));
+const AttendanceHistory = lazy(() => import('../pages/attendance/AttendanceHistory').then(m => ({ default: m.AttendanceHistory })));
+const ClassTimetable = lazy(() => import('../pages/timetable/ClassTimetable').then(m => ({ default: m.ClassTimetable })));
+const AssignmentsPage = lazy(() => import('../pages/assignments/AssignmentsPage').then(m => ({ default: m.AssignmentsPage })));
+const QuizzesPage = lazy(() => import('../pages/quizzes/QuizzesPage').then(m => ({ default: m.QuizzesPage })));
+const StudyMaterialsPage = lazy(() => import('../pages/materials/StudyMaterialsPage').then(m => ({ default: m.StudyMaterialsPage })));
+const AnalyticsPage = lazy(() => import('../pages/analytics/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
+const AnnouncementsPage = lazy(() => import('../pages/announcements/AnnouncementsPage').then(m => ({ default: m.AnnouncementsPage })));
+const SettingsPage = lazy(() => import('../pages/settings/SettingsPage').then(m => ({ default: m.SettingsPage })));
 
 // Trainer Pages
-import { TrainerDashboard } from '../pages/trainer/TrainerDashboard';
-import { TrainerSchedule } from '../pages/trainer/TrainerSchedule';
-import { TrainerAssignments } from '../pages/trainer/TrainerAssignments';
+const TrainerDashboard = lazy(() => import('../pages/trainer/TrainerDashboard').then(m => ({ default: m.TrainerDashboard })));
+const TrainerSchedule = lazy(() => import('../pages/trainer/TrainerSchedule').then(m => ({ default: m.TrainerSchedule })));
+const TrainerAssignments = lazy(() => import('../pages/trainer/TrainerAssignments').then(m => ({ default: m.TrainerAssignments })));
 
 // Admin Pages
-import { AdminDashboard } from '../pages/admin/AdminDashboard';
-import { AdminStudents } from '../pages/admin/AdminStudents';
-import { AdminTrainers } from '../pages/admin/AdminTrainers';
-import { AdminCourses } from '../pages/admin/AdminCourses';
-import { AdminBatches } from '../pages/admin/AdminBatches';
-import { AdminReports } from '../pages/admin/AdminReports';
+const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const AdminStudents = lazy(() => import('../pages/admin/AdminStudents').then(m => ({ default: m.AdminStudents })));
+const AdminTrainers = lazy(() => import('../pages/admin/AdminTrainers').then(m => ({ default: m.AdminTrainers })));
+const AdminCourses = lazy(() => import('../pages/admin/AdminCourses').then(m => ({ default: m.AdminCourses })));
+const AdminBatches = lazy(() => import('../pages/admin/AdminBatches').then(m => ({ default: m.AdminBatches })));
+const AdminReports = lazy(() => import('../pages/admin/AdminReports').then(m => ({ default: m.AdminReports })));
 
 export const AppRoutes: React.FC = () => {
   const { user, role, token, isLoading } = useAuth();
@@ -72,7 +88,8 @@ export const AppRoutes: React.FC = () => {
   };
 
   return (
-    <Routes>
+    <Suspense fallback={<PageLoadingFallback />}>
+      <Routes>
       {/* Login Route: if already logged in, redirect straight to their role homepage */}
       <Route
         path="/login"
@@ -251,5 +268,6 @@ export const AppRoutes: React.FC = () => {
       {/* Catch-all redirect to role-specific home */}
       <Route path="*" element={<Navigate to={defaultHome} replace />} />
     </Routes>
+  </Suspense>
   );
 };

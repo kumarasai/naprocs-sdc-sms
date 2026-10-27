@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { Server as SocketIOServer } from 'socket.io';
 import { config } from './config/env';
 import { connectDB } from './config/db';
@@ -86,6 +87,9 @@ app.use(
     credentials: true,
   })
 );
+
+// High-performance gzip/deflate response compression
+app.use(compression());
 
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));

@@ -18,15 +18,69 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+  // Optimistic initial state: instant 0ms render from localStorage if returning user
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('naprocs_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [profile, setProfile] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem('naprocs_profile');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [enrollment, setEnrollment] = useState<Enrollment | null>(() => {
+    try {
+      const saved = localStorage.getItem('naprocs_enrollment');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [token, setToken] = useState<string | null>(localStorage.getItem('naprocs_token'));
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Only block with full-screen spinner if we have a token but NO cached user in storage
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const storedToken = localStorage.getItem('naprocs_token');
+    const storedUser = localStorage.getItem('naprocs_user');
+    return !!(storedToken && !storedUser);
+  });
+
+  const saveCachedAuth = (userData: User, profileData?: any, enrollmentData?: any) => {
+    try {
+      localStorage.setItem('naprocs_user', JSON.stringify(userData));
+      if (profileData) {
+        localStorage.setItem('naprocs_profile', JSON.stringify(profileData));
+      }
+      if (enrollmentData) {
+        localStorage.setItem('naprocs_enrollment', JSON.stringify(enrollmentData));
+      }
+    } catch {
+      // safe quota catch
+    }
+  };
+
+  const clearCachedAuth = () => {
+    localStorage.removeItem('naprocs_token');
+    localStorage.removeItem('naprocs_user');
+    localStorage.removeItem('naprocs_profile');
+    localStorage.removeItem('naprocs_enrollment');
+    setToken(null);
+    setUser(null);
+    setProfile(null);
+    setEnrollment(null);
+  };
 
   const fetchCurrentUser = async () => {
     const storedToken = localStorage.getItem('naprocs_token');
     if (!storedToken) {
+      clearCachedAuth();
       setIsLoading(false);
       return;
     }
@@ -37,14 +91,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(res.data.user);
         setProfile(res.data.profile);
         setEnrollment(res.data.enrollment);
+        saveCachedAuth(res.data.user, res.data.profile, res.data.enrollment);
       }
-    } catch (err) {
-      console.warn('Session expired or invalid.');
-      localStorage.removeItem('naprocs_token');
-      setToken(null);
-      setUser(null);
-      setProfile(null);
-      setEnrollment(null);
+    } catch (err: any) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        console.warn('Session expired or invalid.');
+        clearCachedAuth();
+      }
     } finally {
       setIsLoading(false);
     }
@@ -64,6 +117,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(res.data.user);
         setProfile(res.data.profile);
         setEnrollment(res.data.enrollment);
+        saveCachedAuth(res.data.user, res.data.profile, res.data.enrollment);
         return res.data.user;
       }
       throw new Error(res.data.message || 'Login failed');
@@ -78,11 +132,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e) {
       // ignore
     } finally {
-      localStorage.removeItem('naprocs_token');
-      setToken(null);
-      setUser(null);
-      setProfile(null);
-      setEnrollment(null);
+      clearCachedAuth();
     }
   };
 
@@ -93,6 +143,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(res.data.user);
         setProfile(res.data.profile);
         setEnrollment(res.data.enrollment);
+        saveCachedAuth(res.data.user, res.data.profile, res.data.enrollment);
       }
     } catch (err) {
       console.error(err);
